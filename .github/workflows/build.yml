@@ -1,0 +1,60 @@
+name: Build & Self-Test
+
+# Build MathLib and run its self-test suite on every push and pull request.
+#
+# MathLib is header-only and portable; its Vector/Matrix/Quaternion types pick a backend at compile
+# time (detail/BackendSelect.h), and the matrix below exercises all four:
+#   - macOS (AppleClang)  -> AppleBackend   (<simd/simd.h> + Accelerate)
+#   - Linux (Clang)       -> SimdBackend    (ext_vector_type, lowers to SSE/AVX here)
+#   - Linux (GCC), Windows (MSVC) -> IntelBackend (baseline SSE2 <immintrin.h> intrinsics)
+#   - Linux (GCC, generic) -> GenericBackend (plain structs, forced via -DMATH_BACKEND)
+#
+# The self-test runner registers its tests through CoreLib's header-only self-test registry, so
+# CoreLib (https://github.com/wobbleworks/CoreLib) is checked out alongside MathLib; CMake finds it
+# at ../CoreLib/include by default.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & self-test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Report every platform's result rather than cancelling the rest on the first failure.
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-15 }
+          - { name: Linux (GCC), os: ubuntu-latest }
+          - { name: Linux (Clang), os: ubuntu-latest, cmake_args: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++" }
+          - { name: Windows (MSVC), os: windows-latest }
+          - { name: Linux (GCC, generic backend), os: ubuntu-latest, cmake_args: "-DCMAKE_CXX_FLAGS=-DMATH_BACKEND=MATH_BACKEND_GENERIC" }
+
+    steps:
+      - name: Check out MathLib
+        uses: actions/checkout@v5
+        with:
+          path: MathLib
+
+      - name: Check out CoreLib (self-test registry dependency)
+        uses: actions/checkout@v5
+        with:
+          repository: wobbleworks/CoreLib
+          path: CoreLib
+
+      # CoreLib is found through MathLib's default CORELIB_INCLUDE_DIR (../CoreLib/include relative to
+      # the MathLib source dir), which resolves to the sibling checkout above on every runner.
+      - name: Configure (CMake, Debug)
+        run: cmake -S MathLib -B build -DCMAKE_BUILD_TYPE=Debug ${{ matrix.cmake_args }}
+
+      # --config is required for multi-config generators (Visual Studio) and ignored by single-config ones.
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      # The runner registers every module self-test; a failing module returns a non-zero exit
+      # code and fails the job.
+      - name: Self-test (CTest)
+        run: ctest --test-dir build --build-config Debug --output-on-failure

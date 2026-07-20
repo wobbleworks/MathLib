@@ -1,0 +1,18 @@
+# Build output
+build/
+build-*/
+lib/
+
+# macOS
+.DS_Store
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.xcuserdata/
+*.xcworkspace/
+.claude
+
+# Compiled objects and archives
+*.o
+*.a
