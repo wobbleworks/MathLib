@@ -41,10 +41,43 @@ struct RealRoots final {
 	[[nodiscard]] constexpr const TScalar *end() const noexcept {return value.data() + count;}
 	
 	/// @brief The same roots reordered ascending.
+	/// @details Counts of two and three use a compare-exchange network, the only
+	/// sizes the solvers in this header produce; anything larger falls back to a
+	/// general sort.
 	/// @return A copy with the live roots sorted.
-	[[nodiscard]] RealRoots sorted() const noexcept {
+	[[nodiscard]] constexpr RealRoots sorted() const noexcept {
 		RealRoots result = *this;
-		std::sort(result.value.begin(), result.value.begin() + result.count);
+		if constexpr (Capacity >= 2) {
+			auto& roots = result.value;
+			
+			// One comparison feeding both selections, so an exchange costs a single
+			// test and compiles to conditional moves rather than a branch.
+			const auto testAndExchange = [&roots](int lower, int upper) noexcept {
+				const TScalar left = roots[lower];
+				const TScalar right = roots[upper];
+				const bool ordered = left <= right;
+				roots[lower] = ordered ? left : right;
+				roots[upper] = ordered ? right : left;
+			};
+
+			if constexpr (Capacity >= 3) {
+				if (result.count == 3) {
+					testAndExchange(0, 1);
+					testAndExchange(1, 2);
+					testAndExchange(0, 1);
+					return result;
+				}
+			}
+			if (result.count == 2) {
+				testAndExchange(0, 1);
+				return result;
+			}
+			if constexpr (Capacity > 3) {
+				if (result.count > 3) {
+					std::sort(roots.begin(), roots.begin() + result.count);
+				}
+			}
+		}
 		return result;
 	}
 };
