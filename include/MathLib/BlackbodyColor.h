@@ -17,6 +17,7 @@
 #include <cmath>
 
 #include "MathLib/Numbers.h"
+#include "MathLib/Vector.h"
 #include "MathLib/SelfTestCheck.h"
 
 ///----------------------------------------
@@ -85,6 +86,29 @@ namespace Math {
 	
 	// The band's share of the total
 	return bandRadiance / totalRadiance;
+}
+
+[[nodiscard]] inline RGBColor blackbodyLinearRGB(float temperatureK) {
+	// Representative RGB wavelengths
+	static constexpr int wavelength_r = 611; // nm
+	static constexpr int wavelength_g = 548; // nm
+	static constexpr int wavelength_b = 454; // nm
+
+	/// Compute a linear (radiometric) max-normalized blackbody RGB chromaticity for a temperature in
+	/// Kelvin. This applies no display gamma, so it is suitable as the color term of a linear-space
+	/// HDR multiply (the magnitude is carried separately).
+	temperatureK = std::max(temperatureK, 500.0f);
+	auto radiance_r = planckSpectralRadiance(wavelength_r, temperatureK);
+	auto radiance_g = planckSpectralRadiance(wavelength_g, temperatureK);
+	auto radiance_b = planckSpectralRadiance(wavelength_b, temperatureK);
+	auto max_radiance = std::max(std::max(radiance_r, radiance_g), radiance_b);
+	return RGBColor{radiance_r, radiance_g, radiance_b} / max_radiance;
+}
+
+[[nodiscard]] inline RGBColor blackbodyRGB(float temperatureK) {
+	auto linearRGB = blackbodyLinearRGB(temperatureK);
+	constexpr float gamma = 1.0f / 2.2f;
+	return RGBColor{std::powf(linearRGB.r, gamma), std::powf(linearRGB.g, gamma), std::powf(linearRGB.b, gamma)};
 }
 
 ///----------------------------------------
