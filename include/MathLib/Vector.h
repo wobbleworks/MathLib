@@ -453,6 +453,15 @@ template <class T, int N>
 	return false;
 }
 
+///----------------------------------------
+/// @brief Raises each component of @p base to the scalar @p exponent (component-wise @c std::pow).
+///----------------------------------------
+
+template <class T, int N>
+[[nodiscard]] Vector<T, N> pow(const Vector<T, N>& base, std::type_identity_t<T> exponent) noexcept {
+	return Vector<T, N>::fromNative(detail::Backend::pow(base.native(), exponent));
+}
+
 /// @brief Returns @p vector rotated about the X axis by @p radians (y' = y·cos + z·sin, z' = z·cos − y·sin).
 template <class T>
 [[nodiscard]] Vector<T, 3> rotatedAroundX(const Vector<T, 3>& vector, T radians) noexcept {

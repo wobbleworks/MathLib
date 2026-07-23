@@ -803,7 +803,14 @@ struct Backend {
 		}
 		return result;
 	}
-	
+
+	template <class T, int N>
+	[[nodiscard]] static IntelVector<T, N> pow(const IntelVector<T, N>& base, T exponent) noexcept {
+		IntelVector<T, N> result = base;
+		for (int i = 0; i < N; ++i) result[i] = std::pow(base[i], exponent);
+		return result;
+	}
+
 	/// @}
 	
 	///----------------------------------------

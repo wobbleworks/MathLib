@@ -93,7 +93,8 @@ struct Backend {
 	template <class V> [[nodiscard]] static auto distanceSquared(const V& a, const V& b) noexcept { return simd_distance_squared(a, b); }
 	template <class V> [[nodiscard]] static auto normalize(const V& v) noexcept { return simd_normalize(v); }
 	template <class V> [[nodiscard]] static auto clamp(const V& value, const V& low, const V& high) noexcept { return simd_clamp(value, low, high); }
-	
+	template <class V, class TExponent> [[nodiscard]] static auto pow(const V& base, TExponent exponent) noexcept { return simd::pow(base, V(exponent)); }
+
 	/// @}
 	
 	///----------------------------------------

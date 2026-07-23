@@ -189,7 +189,14 @@ struct Backend {
 		}
 		return result;
 	}
-	
+
+	template <class T, int N>
+	[[nodiscard]] static SimdVector<T, N> pow(const SimdVector<T, N>& base, T exponent) noexcept {
+		SimdVector<T, N> result = base;
+		for (int i = 0; i < N; ++i) result[i] = std::pow(base[i], exponent);
+		return result;
+	}
+
 	/// @}
 	
 	///----------------------------------------

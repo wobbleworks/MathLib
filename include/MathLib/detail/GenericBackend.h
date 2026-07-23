@@ -327,7 +327,14 @@ struct Backend {
 		}
 		return result;
 	}
-	
+
+	template <class T, int N>
+	[[nodiscard]] static GenericVector<T, N> pow(const GenericVector<T, N>& base, T exponent) noexcept {
+		GenericVector<T, N> result;
+		for (int i = 0; i < N; ++i) result[i] = std::pow(base[i], exponent);
+		return result;
+	}
+
 	/// @}
 	
 	///----------------------------------------

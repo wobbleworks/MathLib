@@ -110,12 +110,16 @@ namespace Math {
 	return RGBColor{radiance_r, radiance_g, radiance_b};
 }
 
-[[nodiscard]] inline RGBColor blackbodyRGB(float temperatureK) {
+[[nodiscard]] inline RGBColor blackbodyNormalizedLinearRGB(float temperatureK) {
 	auto linearRGB = blackbodyLinearRGB(temperatureK);
 	auto maxLevel = std::max(std::max(linearRGB.r, linearRGB.g), linearRGB.b);
+	return linearRGB / maxLevel;
+}
 
+[[nodiscard]] inline RGBColor blackbodyRGB(float temperatureK) {
+	auto linearRGB = blackbodyNormalizedLinearRGB(temperatureK);
 	constexpr float gamma = 1.0f / 2.2f;
-	return RGBColor{std::powf(linearRGB.r / maxLevel, gamma), std::powf(linearRGB.g / maxLevel, gamma), std::powf(linearRGB.b / maxLevel, gamma)};
+	return Math::pow(linearRGB, gamma);
 }
 
 ///----------------------------------------
