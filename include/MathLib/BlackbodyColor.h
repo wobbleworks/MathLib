@@ -93,22 +93,29 @@ namespace Math {
 	static constexpr int wavelength_r = 611; // nm
 	static constexpr int wavelength_g = 548; // nm
 	static constexpr int wavelength_b = 454; // nm
-
+	
+	// White point
+	static constexpr float whiteTemperatureK = 6500.0f;
+	static const float white_r = planckSpectralRadiance(wavelength_r, whiteTemperatureK);
+	static const float white_g = planckSpectralRadiance(wavelength_g, whiteTemperatureK);
+	static const float white_b = planckSpectralRadiance(wavelength_b, whiteTemperatureK);
+	
 	/// Compute a linear (radiometric) max-normalized blackbody RGB chromaticity for a temperature in
 	/// Kelvin. This applies no display gamma, so it is suitable as the color term of a linear-space
 	/// HDR multiply (the magnitude is carried separately).
 	temperatureK = std::max(temperatureK, 500.0f);
-	auto radiance_r = planckSpectralRadiance(wavelength_r, temperatureK);
-	auto radiance_g = planckSpectralRadiance(wavelength_g, temperatureK);
-	auto radiance_b = planckSpectralRadiance(wavelength_b, temperatureK);
-	auto max_radiance = std::max(std::max(radiance_r, radiance_g), radiance_b);
-	return RGBColor{radiance_r, radiance_g, radiance_b} / max_radiance;
+	auto radiance_r = planckSpectralRadiance(wavelength_r, temperatureK) / white_r;
+	auto radiance_g = planckSpectralRadiance(wavelength_g, temperatureK) / white_g;
+	auto radiance_b = planckSpectralRadiance(wavelength_b, temperatureK) / white_b;
+	return RGBColor{radiance_r, radiance_g, radiance_b};
 }
 
 [[nodiscard]] inline RGBColor blackbodyRGB(float temperatureK) {
 	auto linearRGB = blackbodyLinearRGB(temperatureK);
+	auto maxLevel = std::max(std::max(linearRGB.r, linearRGB.g), linearRGB.b);
+
 	constexpr float gamma = 1.0f / 2.2f;
-	return RGBColor{std::powf(linearRGB.r, gamma), std::powf(linearRGB.g, gamma), std::powf(linearRGB.b, gamma)};
+	return RGBColor{std::powf(linearRGB.r / maxLevel, gamma), std::powf(linearRGB.g / maxLevel, gamma), std::powf(linearRGB.b / maxLevel, gamma)};
 }
 
 ///----------------------------------------
