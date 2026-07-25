@@ -67,8 +67,8 @@ struct VectorStorage<TScalar, 2> {
 		Native _native;
 		struct { TScalar x, y; };
 	};
-	VectorStorage() noexcept : _native{} {}
-	VectorStorage(const Native& native) noexcept : _native(native) {}
+	constexpr VectorStorage() noexcept : _native{} {}
+	constexpr VectorStorage(const Native& native) noexcept : _native(native) {}
 };
 
 template <class TScalar>
@@ -80,8 +80,8 @@ struct VectorStorage<TScalar, 3> {
 		struct { TScalar r, g, b; };
 		struct { TScalar h, s, v; };
 	};
-	VectorStorage() noexcept : _native{} {}
-	VectorStorage(const Native& native) noexcept : _native(native) {}
+	constexpr VectorStorage() noexcept : _native{} {}
+	constexpr VectorStorage(const Native& native) noexcept : _native(native) {}
 };
 
 template <class TScalar>
@@ -93,8 +93,8 @@ struct VectorStorage<TScalar, 4> {
 		struct { TScalar r, g, b, a; };
 		struct { TScalar h, s, v, l; };
 	};
-	VectorStorage() noexcept : _native{} {}
-	VectorStorage(const Native& native) noexcept : _native(native) {}
+	constexpr VectorStorage() noexcept : _native{} {}
+	constexpr VectorStorage(const Native& native) noexcept : _native(native) {}
 };
 	
 } // namespace detail
@@ -122,31 +122,31 @@ public:
 	/// @brief Constructs the zero vector.
 	///----------------------------------------
 	
-	Vector() noexcept = default;
+	constexpr Vector() noexcept = default;
 	
 	///----------------------------------------
 	/// @brief Constructs a 2-component vector.
 	///----------------------------------------
 	
-	Vector(Scalar x, Scalar y) noexcept requires (Count == 2) : Base(Native{x, y}) {}
+	constexpr Vector(Scalar x, Scalar y) noexcept requires (Count == 2) : Base(Native{x, y}) {}
 	
 	///----------------------------------------
 	/// @brief Constructs a 3-component vector.
 	///----------------------------------------
 	
-	Vector(Scalar x, Scalar y, Scalar z) noexcept requires (Count == 3) : Base(Native{x, y, z}) {}
+	constexpr Vector(Scalar x, Scalar y, Scalar z) noexcept requires (Count == 3) : Base(Native{x, y, z}) {}
 	
 	///----------------------------------------
 	/// @brief Constructs a 4-component vector.
 	///----------------------------------------
 	
-	Vector(Scalar x, Scalar y, Scalar z, Scalar w) noexcept requires (Count == 4) : Base(Native{x, y, z, w}) {}
+	constexpr Vector(Scalar x, Scalar y, Scalar z, Scalar w) noexcept requires (Count == 4) : Base(Native{x, y, z, w}) {}
 	
 	///----------------------------------------
 	/// @brief Wraps a native backend vector.
 	///----------------------------------------
 	
-	[[nodiscard]] static Vector fromNative(const Native& native) noexcept {
+	[[nodiscard]] constexpr static Vector fromNative(const Native& native) noexcept {
 		Vector result;
 		result._native = native;
 		return result;
@@ -157,29 +157,29 @@ public:
 	/// @brief Implicitly wraps a native backend vector (interop with raw backend types, gated by @c MATH_IMPLICIT_NATIVE).
 	///----------------------------------------
 	
-	Vector(const Native& native) noexcept : Base(native) {}
+	constexpr Vector(const Native& native) noexcept : Base(native) {}
 	
 	///----------------------------------------
 	/// @brief Implicitly converts to the native backend vector (interop with raw backend types).
 	///----------------------------------------
 	
-	[[nodiscard]] operator const Native&() const noexcept { return _native; }
+	[[nodiscard]] constexpr operator const Native&() const noexcept { return _native; }
 #endif
 	
 	/// @brief The underlying backend vector (the platform escape hatch).
-	[[nodiscard]] const Native& native() const noexcept { return _native; }
+	[[nodiscard]] constexpr const Native& native() const noexcept { return _native; }
 	
 	/// @brief The underlying backend vector, mutable.
-	[[nodiscard]] Native& native() noexcept { return _native; }
+	[[nodiscard]] constexpr Native& native() noexcept { return _native; }
 	
 	/// @brief The component at @p index.
-	[[nodiscard]] Scalar operator[](int index) const noexcept { return _native[index]; }
+	[[nodiscard]] constexpr Scalar operator[](int index) const noexcept { return _native[index]; }
 	
 	///----------------------------------------
 	/// @brief Exact component-wise equality.
 	///----------------------------------------
 	
-	[[nodiscard]] bool operator==(const Vector& other) const noexcept {
+	[[nodiscard]] constexpr bool operator==(const Vector& other) const noexcept {
 		for (int i = 0; i < Count; ++i) {
 			if (_native[i] != other._native[i]) {
 				return false;
@@ -189,16 +189,16 @@ public:
 	}
 	
 	/// @brief Adds @p other component-wise.
-	Vector& operator+=(const Vector& other) noexcept { _native += other._native; return *this; }
+	constexpr Vector& operator+=(const Vector& other) noexcept { _native += other._native; return *this; }
 	
 	/// @brief Subtracts @p other component-wise.
-	Vector& operator-=(const Vector& other) noexcept { _native -= other._native; return *this; }
+	constexpr Vector& operator-=(const Vector& other) noexcept { _native -= other._native; return *this; }
 	
 	/// @brief Scales by @p scale.
-	Vector& operator*=(Scalar scale) noexcept { _native *= scale; return *this; }
+	constexpr Vector& operator*=(Scalar scale) noexcept { _native *= scale; return *this; }
 	
 	/// @brief Divides by @p scale.
-	Vector& operator/=(Scalar scale) noexcept { _native /= scale; return *this; }
+	constexpr Vector& operator/=(Scalar scale) noexcept { _native /= scale; return *this; }
 };
 
 ///----------------------------------------
@@ -206,7 +206,7 @@ public:
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
 	return Vector<T, N>::fromNative(a.native() + b.native());
 }
 
@@ -215,7 +215,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator-(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator-(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
 	return Vector<T, N>::fromNative(a.native() - b.native());
 }
 
@@ -224,7 +224,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator*(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator*(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
 	return Vector<T, N>::fromNative(a.native() * b.native());
 }
 
@@ -233,7 +233,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator/(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator/(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
 	return Vector<T, N>::fromNative(a.native() / b.native());
 }
 
@@ -242,7 +242,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator-(const Vector<T, N>& vector) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator-(const Vector<T, N>& vector) noexcept {
 	return Vector<T, N>::fromNative(-vector.native());
 }
 
@@ -251,7 +251,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator*(const Vector<T, N>& vector, std::type_identity_t<T> scale) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator*(const Vector<T, N>& vector, std::type_identity_t<T> scale) noexcept {
 	return Vector<T, N>::fromNative(vector.native() * scale);
 }
 
@@ -260,7 +260,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator*(std::type_identity_t<T> scale, const Vector<T, N>& vector) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator*(std::type_identity_t<T> scale, const Vector<T, N>& vector) noexcept {
 	return vector * scale;
 }
 
@@ -269,7 +269,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator/(const Vector<T, N>& vector, std::type_identity_t<T> scale) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator/(const Vector<T, N>& vector, std::type_identity_t<T> scale) noexcept {
 	return Vector<T, N>::fromNative(vector.native() / scale);
 }
 
@@ -278,7 +278,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator/(std::type_identity_t<T> scale, const Vector<T, N>& vector) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator/(std::type_identity_t<T> scale, const Vector<T, N>& vector) noexcept {
 	return Vector<T, N>::fromNative(scale / vector.native());
 }
 
@@ -287,7 +287,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator+(const Vector<T, N>& vector, std::type_identity_t<T> scalar) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator+(const Vector<T, N>& vector, std::type_identity_t<T> scalar) noexcept {
 	return Vector<T, N>::fromNative(vector.native() + scalar);
 }
 
@@ -296,7 +296,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator+(std::type_identity_t<T> scalar, const Vector<T, N>& vector) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator+(std::type_identity_t<T> scalar, const Vector<T, N>& vector) noexcept {
 	return vector + scalar;
 }
 
@@ -305,7 +305,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator-(const Vector<T, N>& vector, std::type_identity_t<T> scalar) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator-(const Vector<T, N>& vector, std::type_identity_t<T> scalar) noexcept {
 	return Vector<T, N>::fromNative(vector.native() - scalar);
 }
 
@@ -314,7 +314,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> operator-(std::type_identity_t<T> scalar, const Vector<T, N>& vector) noexcept {
+[[nodiscard]] constexpr Vector<T, N> operator-(std::type_identity_t<T> scalar, const Vector<T, N>& vector) noexcept {
 	return Vector<T, N>::fromNative(scalar - vector.native());
 }
 
@@ -359,7 +359,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] bool approxEqual(const Vector<T, N>& a, const Vector<T, N>& b, T tolerance) noexcept {
+[[nodiscard]] constexpr bool approxEqual(const Vector<T, N>& a, const Vector<T, N>& b, T tolerance) noexcept {
 	for (int i = 0; i < N; ++i) {
 		if (std::abs(a[i] - b[i]) > tolerance) {
 			return false;
@@ -400,7 +400,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> lerp(const Vector<T, N>& a, const Vector<T, N>& b, T t) noexcept {
+[[nodiscard]] constexpr Vector<T, N> lerp(const Vector<T, N>& a, const Vector<T, N>& b, T t) noexcept {
 	return a + (b - a) * t;
 }
 
@@ -409,7 +409,7 @@ template <class T, int N>
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] Vector<T, N> midpoint(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
+[[nodiscard]] constexpr Vector<T, N> midpoint(const Vector<T, N>& a, const Vector<T, N>& b) noexcept {
 	return (a + b) * T(0.5);
 }
 
@@ -502,6 +502,16 @@ using RGBAColor = Float4;
 ///          every other operation delegates to the backend and is out of scope. Throws
 ///          @ref Math::selftest::Failure on the first violation.
 ///----------------------------------------
+// Compile-time verification of constexpr initialization and operations
+static_assert([] {
+	constexpr Float3 v{1.0f, 2.0f, 3.0f};
+	constexpr Float3 w{4.0f, 5.0f, 6.0f};
+	constexpr Float3 sum = v + w;
+	constexpr Float3 scaled = v * 2.0f;
+	return sum[0] == 5.0f && sum[1] == 7.0f && sum[2] == 9.0f &&
+	       scaled[0] == 2.0f && scaled[1] == 4.0f && scaled[2] == 6.0f;
+}(), "Vector must support constexpr initialization and basic arithmetic");
+
 inline void vectorSelfTest() {
 	using selftest::check;
 	const auto near = [](double lhs, double rhs) noexcept { return std::abs(lhs - rhs) < 1.0e-9; };
