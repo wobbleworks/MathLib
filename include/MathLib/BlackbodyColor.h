@@ -162,12 +162,6 @@ inline constexpr float c_minimumChromaticityTemperatureK = 500.0f;
 	return linearRGB / maxLevel;
 }
 
-[[nodiscard]] inline RGBColor blackbodyRGB(float temperatureK) {
-	auto linearRGB = blackbodyNormalizedLinearRGB(temperatureK);
-	constexpr float gamma = 1.0f / 2.2f;
-	return Math::pow(linearRGB, gamma);
-}
-
 ///----------------------------------------
 namespace detail {
 ///----------------------------------------
