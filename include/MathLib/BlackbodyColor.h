@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 #include "MathLib/Numbers.h"
@@ -88,31 +89,76 @@ namespace Math {
 	return bandRadiance / totalRadiance;
 }
 
-[[nodiscard]] inline RGBColor blackbodyLinearRGB(float temperatureK) {
-	// Representative RGB wavelengths
-	static constexpr int wavelength_r = 611; // nm
-	static constexpr int wavelength_g = 548; // nm
-	static constexpr int wavelength_b = 454; // nm
-	
-	// White point
-	static constexpr float whiteTemperatureK = 6500.0f;
-	static const float white_r = planckSpectralRadiance(wavelength_r, whiteTemperatureK);
-	static const float white_g = planckSpectralRadiance(wavelength_g, whiteTemperatureK);
-	static const float white_b = planckSpectralRadiance(wavelength_b, whiteTemperatureK);
-	
-	/// Compute a linear (radiometric) max-normalized blackbody RGB chromaticity for a temperature in
-	/// Kelvin. This applies no display gamma, so it is suitable as the color term of a linear-space
-	/// HDR multiply (the magnitude is carried separately).
-	temperatureK = std::max(temperatureK, 500.0f);
-	auto radiance_r = planckSpectralRadiance(wavelength_r, temperatureK) / white_r;
-	auto radiance_g = planckSpectralRadiance(wavelength_g, temperatureK) / white_g;
-	auto radiance_b = planckSpectralRadiance(wavelength_b, temperatureK) / white_b;
-	return RGBColor{radiance_r, radiance_g, radiance_b};
+///----------------------------------------
+/// MARK: Display primaries
+///----------------------------------------
+
+/// @brief Representative wavelength of the red display primary, in nanometres.
+inline constexpr float c_redPrimaryWavelengthNm = 611.0f;
+
+/// @brief Representative wavelength of the green display primary, in nanometres.
+inline constexpr float c_greenPrimaryWavelengthNm = 548.0f;
+
+/// @brief Representative wavelength of the blue display primary, in nanometres.
+inline constexpr float c_bluePrimaryWavelengthNm = 454.0f;
+
+///----------------------------------------
+/// @brief The blackbody temperature the RGB chromaticity is white-balanced against, in kelvin.
+/// @details A body at this temperature comes out exactly neutral. Without the white balance the
+///          model's neutral falls near 5300 K and the ladder passes through a green maximum on the
+///          way, tinting sunlike bodies green.
+///----------------------------------------
+
+inline constexpr float c_whitePointTemperatureK = 6500.0f;
+
+///----------------------------------------
+/// @brief The coolest temperature the chromaticity is evaluated at, in kelvin.
+/// @details Below this the ratios between the three primaries stop being numerically meaningful.
+///----------------------------------------
+
+inline constexpr float c_minimumChromaticityTemperatureK = 500.0f;
+
+///----------------------------------------
+///   @brief Planck spectral radiance at the three display primaries, as an RGB triple.
+/// @details The raw radiances, in W·sr⁻¹·m⁻³ — around 1e-16 at stellar temperatures, so a consumer
+///          that carries these into a lower-precision pipeline should normalize them first.
+///   @param temperatureK Blackbody temperature in kelvin.
+/// @returns The three radiances, red first.
+///----------------------------------------
+
+[[nodiscard]] inline RGBColor blackbodyPrimaryRadiance(float temperatureK) noexcept {
+	return RGBColor{
+		planckSpectralRadiance(c_redPrimaryWavelengthNm, temperatureK),
+		planckSpectralRadiance(c_greenPrimaryWavelengthNm, temperatureK),
+		planckSpectralRadiance(c_bluePrimaryWavelengthNm, temperatureK)};
 }
 
-[[nodiscard]] inline RGBColor blackbodyNormalizedLinearRGB(float temperatureK) {
-	auto linearRGB = blackbodyLinearRGB(temperatureK);
-	auto maxLevel = std::max(std::max(linearRGB.r, linearRGB.g), linearRGB.b);
+///----------------------------------------
+///   @brief White-balanced linear blackbody RGB for a temperature in kelvin.
+/// @details The primary radiances divided by those of the white point, so @ref
+///          c_whitePointTemperatureK lands on neutral. No display gamma is applied, so this is
+///          suitable as the color term of a linear-space multiply where brightness is carried
+///          separately. Not normalized — see @ref blackbodyNormalizedLinearRGB.
+///   @param temperatureK Blackbody temperature in kelvin, clamped up to @ref
+///          c_minimumChromaticityTemperatureK.
+/// @returns The white-balanced linear color.
+///----------------------------------------
+
+[[nodiscard]] inline RGBColor blackbodyLinearRGB(float temperatureK) noexcept {
+	static const RGBColor whiteRadiance = blackbodyPrimaryRadiance(c_whitePointTemperatureK);
+	const auto radiance = blackbodyPrimaryRadiance(std::max(temperatureK, c_minimumChromaticityTemperatureK));
+	return radiance / whiteRadiance;
+}
+
+///----------------------------------------
+///   @brief White-balanced linear blackbody chromaticity, scaled so its brightest channel is one.
+///   @param temperatureK Blackbody temperature in kelvin.
+/// @returns The chromaticity, with its brightest channel at one.
+///----------------------------------------
+
+[[nodiscard]] inline RGBColor blackbodyNormalizedLinearRGB(float temperatureK) noexcept {
+	const auto linearRGB = blackbodyLinearRGB(temperatureK);
+	const auto maxLevel = std::max(std::max(linearRGB.r, linearRGB.g), linearRGB.b);
 	return linearRGB / maxLevel;
 }
 
