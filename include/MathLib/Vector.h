@@ -497,20 +497,74 @@ using RGBColor = Float3;
 using RGBAColor = Float4;
 
 ///----------------------------------------
+namespace detail {
+///----------------------------------------
+
+///----------------------------------------
+/// @brief A class template whose argument is a non-type template parameter, so naming it is valid only
+///        where the expression that supplies the argument is a constant expression.
+/// @details Substituting a non-constant expression is a substitution failure in the immediate context
+///          rather than an error, which is what lets @ref Math::vectorsAreConstantEvaluable *ask* the
+///          backend whether it constant-evaluates instead of failing to compile when it does not.
+///----------------------------------------
+
+template <auto Value>
+struct ConstantEvaluationProbe {};
+
+///----------------------------------------
+/// @brief Whether a component of @p TVector can be read during constant evaluation.
+///----------------------------------------
+
+template <class TVector>
+concept ConstantEvaluableComponents = requires { ConstantEvaluationProbe<TVector{}[0]>{}; };
+
+///----------------------------------------
+/// @brief Exercises construction, component-wise arithmetic, scalar scaling and component access in a
+///        single expression chain, so calling this in a constant expression proves the whole surface
+///        constant-evaluates. Covers both scalar widths: on backends that split a @c double vector over
+///        two registers, @ref Double3 travels a different path than @ref Float3.
+/// @note Deliberately holds no @c constexpr locals. A @c constexpr local must be initialized by a
+///       constant expression whether or not the function is ever called, which would make this a hard
+///       error on the backends the guarded @c static_assert below exists to skip.
+///----------------------------------------
+
+[[nodiscard]] constexpr bool vectorConstantEvaluationHolds() noexcept {
+	const Float3 sum = Float3{1.0f, 2.0f, 3.0f} + Float3{4.0f, 5.0f, 6.0f};
+	const Float3 scaled = Float3{1.0f, 2.0f, 3.0f} * 2.0f;
+	const Double3 difference = Double3{10.0, 20.0, 30.0} - Double3{1.0, 2.0, 3.0};
+	return sum[0] == 5.0f && sum[1] == 7.0f && sum[2] == 9.0f &&
+	       scaled[0] == 2.0f && scaled[1] == 4.0f && scaled[2] == 6.0f &&
+	       difference[0] == 9.0 && difference[1] == 18.0 && difference[2] == 27.0;
+}
+
+} // namespace detail
+
+///----------------------------------------
+/// @brief Whether @ref Vector values can be built and computed with during constant evaluation on the
+///        selected backend — that is, whether @c constexpr @c Math::Float3 compiles.
+/// @details Every backend marks the whole vector surface @c constexpr, but two of them reach it by
+///          different routes: @ref detail/GenericBackend.h and @ref detail/IntelBackend.h are plain
+///          scalar code at compile time (the Intel one branches to its SSE2 registers only at run
+///          time), while @ref detail/AppleBackend.h and @ref detail/SimdBackend.h rest on the
+///          compiler's own vector type, whose element access became a constant expression only in
+///          Clang 20. Under an older Clang the arithmetic still folds but reading a lane back does
+///          not, so this constant is false there and the @c static_assert below stands down rather
+///          than failing a build that is otherwise perfectly good. Consumers can test it for the same
+///          reason: it reports a toolchain capability, not a MathLib configuration.
+///----------------------------------------
+
+inline constexpr bool vectorsAreConstantEvaluable =
+	detail::ConstantEvaluableComponents<Float3> && detail::ConstantEvaluableComponents<Double3>;
+
+static_assert(!vectorsAreConstantEvaluable || detail::vectorConstantEvaluationHolds(),
+	"Vector must support constexpr initialization and basic arithmetic");
+
+///----------------------------------------
 /// @brief Verifies the hand-written axis rotations against known basis-vector turns.
 /// @details Only @ref rotatedAroundX / @ref rotatedAroundY / @ref rotatedAroundZ are hand-written;
 ///          every other operation delegates to the backend and is out of scope. Throws
 ///          @ref Math::selftest::Failure on the first violation.
 ///----------------------------------------
-// Compile-time verification of constexpr initialization and operations
-static_assert([] {
-	constexpr Float3 v{1.0f, 2.0f, 3.0f};
-	constexpr Float3 w{4.0f, 5.0f, 6.0f};
-	constexpr Float3 sum = v + w;
-	constexpr Float3 scaled = v * 2.0f;
-	return sum[0] == 5.0f && sum[1] == 7.0f && sum[2] == 9.0f &&
-	       scaled[0] == 2.0f && scaled[1] == 4.0f && scaled[2] == 6.0f;
-}(), "Vector must support constexpr initialization and basic arithmetic");
 
 inline void vectorSelfTest() {
 	using selftest::check;

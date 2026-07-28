@@ -12,6 +12,14 @@ name: Build & Self-Test
 # The self-test runner registers its tests through CoreLib's header-only self-test registry, so
 # CoreLib (https://github.com/wobbleworks/CoreLib) is checked out alongside MathLib; CMake finds it
 # at ../CoreLib/include by default.
+#
+# The Linux Clang leg installs Clang 20 rather than using the runner image's (16-18). Reading an
+# element of a compiler vector type inside a constant expression became legal only in Clang 20, and
+# Vector.h reports that as Math::vectorsAreConstantEvaluable: under an older Clang the constant is
+# false and the constexpr static_assert stands down. Since the macOS runner's Apple Clang is older
+# still, this leg is the only place the ext_vector backend's constexpr surface is actually checked —
+# the GCC and MSVC legs cover it on the Intel and generic backends, whose constant-evaluation paths
+# are plain scalar code.
 on:
   push:
   pull_request:
@@ -29,7 +37,7 @@ jobs:
         include:
           - { name: macOS, os: macos-15 }
           - { name: Linux (GCC), os: ubuntu-latest }
-          - { name: Linux (Clang), os: ubuntu-latest, cmake_args: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++" }
+          - { name: Linux (Clang), os: ubuntu-latest, cmake_args: "-DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20" }
           - { name: Windows (MSVC), os: windows-latest }
           - { name: Linux (GCC, generic backend), os: ubuntu-latest, cmake_args: "-DCMAKE_CXX_FLAGS=-DMATH_BACKEND=MATH_BACKEND_GENERIC" }
 
@@ -44,6 +52,11 @@ jobs:
         with:
           repository: wobbleworks/CoreLib
           path: CoreLib
+
+      # The runner image ships Clang 16-18 only, so pull 20 from apt.llvm.org (see the header comment).
+      - name: Install Clang 20 (Linux Clang job)
+        if: matrix.name == 'Linux (Clang)'
+        run: wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
 
       # CoreLib is found through MathLib's default CORELIB_INCLUDE_DIR (../CoreLib/include relative to
       # the MathLib source dir), which resolves to the sibling checkout above on every runner.

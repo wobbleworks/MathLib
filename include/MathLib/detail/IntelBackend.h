@@ -31,6 +31,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <type_traits>
 
 ///----------------------------------------
 namespace Math {
@@ -47,6 +48,11 @@ namespace detail {
 ///        3-vector is a distinct type from a 4-vector and @p TScalar / @p Count stay deducible in the
 ///        @ref Backend operations. Each specialization holds an intrinsic register unioned with a scalar
 ///        array @c e for @c [] access; padding lanes are kept zero and are never read by the operations.
+/// @details The constructors are @c constexpr so @ref Math::Vector values can be built during constant
+///          evaluation, where the intrinsics — ordinary runtime functions — cannot run. Each one
+///          initializes the scalar array @c e (the union member a constant expression may then read)
+///          and, at run time only, overwrites it with the equivalent register form; the array store is
+///          dead there and the optimizer drops it, so the emitted code is unchanged.
 ///----------------------------------------
 
 template <class TScalar, int Count>
@@ -64,11 +70,11 @@ struct IntelVector<float, 2> {
 		float e[4];
 		struct { float x, y; };
 	};
-	IntelVector() noexcept : m(_mm_setzero_ps()) {}
-	IntelVector(float splat) noexcept : m(_mm_set_ps(0.0f, 0.0f, splat, splat)) {}
-	IntelVector(float x_, float y_) noexcept : m(_mm_set_ps(0.0f, 0.0f, y_, x_)) {}
-	[[nodiscard]] float& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const float& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{} { if (!std::is_constant_evaluated()) m = _mm_setzero_ps(); }
+	constexpr IntelVector(float splat) noexcept : e{splat, splat} { if (!std::is_constant_evaluated()) m = _mm_set_ps(0.0f, 0.0f, splat, splat); }
+	constexpr IntelVector(float x_, float y_) noexcept : e{x_, y_} { if (!std::is_constant_evaluated()) m = _mm_set_ps(0.0f, 0.0f, y_, x_); }
+	[[nodiscard]] constexpr float& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const float& operator[](int index) const noexcept { return e[index]; }
 };
 
 template <>
@@ -78,11 +84,11 @@ struct IntelVector<float, 3> {
 		float e[4];
 		struct { float x, y, z; };
 	};
-	IntelVector() noexcept : m(_mm_setzero_ps()) {}
-	IntelVector(float splat) noexcept : m(_mm_set_ps(0.0f, splat, splat, splat)) {}
-	IntelVector(float x_, float y_, float z_) noexcept : m(_mm_set_ps(0.0f, z_, y_, x_)) {}
-	[[nodiscard]] float& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const float& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{} { if (!std::is_constant_evaluated()) m = _mm_setzero_ps(); }
+	constexpr IntelVector(float splat) noexcept : e{splat, splat, splat} { if (!std::is_constant_evaluated()) m = _mm_set_ps(0.0f, splat, splat, splat); }
+	constexpr IntelVector(float x_, float y_, float z_) noexcept : e{x_, y_, z_} { if (!std::is_constant_evaluated()) m = _mm_set_ps(0.0f, z_, y_, x_); }
+	[[nodiscard]] constexpr float& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const float& operator[](int index) const noexcept { return e[index]; }
 };
 
 template <>
@@ -92,11 +98,11 @@ struct IntelVector<float, 4> {
 		float e[4];
 		struct { float x, y, z, w; };
 	};
-	IntelVector() noexcept : m(_mm_setzero_ps()) {}
-	IntelVector(float splat) noexcept : m(_mm_set1_ps(splat)) {}
-	IntelVector(float x_, float y_, float z_, float w_) noexcept : m(_mm_set_ps(w_, z_, y_, x_)) {}
-	[[nodiscard]] float& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const float& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{} { if (!std::is_constant_evaluated()) m = _mm_setzero_ps(); }
+	constexpr IntelVector(float splat) noexcept : e{splat, splat, splat, splat} { if (!std::is_constant_evaluated()) m = _mm_set1_ps(splat); }
+	constexpr IntelVector(float x_, float y_, float z_, float w_) noexcept : e{x_, y_, z_, w_} { if (!std::is_constant_evaluated()) m = _mm_set_ps(w_, z_, y_, x_); }
+	[[nodiscard]] constexpr float& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const float& operator[](int index) const noexcept { return e[index]; }
 };
 
 ///----------------------------------------
@@ -110,11 +116,11 @@ struct IntelVector<double, 2> {
 		double e[2];
 		struct { double x, y; };
 	};
-	IntelVector() noexcept : m(_mm_setzero_pd()) {}
-	IntelVector(double splat) noexcept : m(_mm_set1_pd(splat)) {}
-	IntelVector(double x_, double y_) noexcept : m(_mm_set_pd(y_, x_)) {}
-	[[nodiscard]] double& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const double& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{} { if (!std::is_constant_evaluated()) m = _mm_setzero_pd(); }
+	constexpr IntelVector(double splat) noexcept : e{splat, splat} { if (!std::is_constant_evaluated()) m = _mm_set1_pd(splat); }
+	constexpr IntelVector(double x_, double y_) noexcept : e{x_, y_} { if (!std::is_constant_evaluated()) m = _mm_set_pd(y_, x_); }
+	[[nodiscard]] constexpr double& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const double& operator[](int index) const noexcept { return e[index]; }
 };
 
 ///----------------------------------------
@@ -129,11 +135,11 @@ struct IntelVector<double, 3> {
 		double e[4];
 		struct { double x, y, z; };
 	};
-	IntelVector() noexcept : m{_mm_setzero_pd(), _mm_setzero_pd()} {}
-	IntelVector(double splat) noexcept : m{_mm_set1_pd(splat), _mm_set_pd(0.0, splat)} {}
-	IntelVector(double x_, double y_, double z_) noexcept : m{_mm_set_pd(y_, x_), _mm_set_pd(0.0, z_)} {}
-	[[nodiscard]] double& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const double& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{} { if (!std::is_constant_evaluated()) m = {_mm_setzero_pd(), _mm_setzero_pd()}; }
+	constexpr IntelVector(double splat) noexcept : e{splat, splat, splat} { if (!std::is_constant_evaluated()) m = {_mm_set1_pd(splat), _mm_set_pd(0.0, splat)}; }
+	constexpr IntelVector(double x_, double y_, double z_) noexcept : e{x_, y_, z_} { if (!std::is_constant_evaluated()) m = {_mm_set_pd(y_, x_), _mm_set_pd(0.0, z_)}; }
+	[[nodiscard]] constexpr double& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const double& operator[](int index) const noexcept { return e[index]; }
 };
 
 template <>
@@ -143,11 +149,11 @@ struct IntelVector<double, 4> {
 		double e[4];
 		struct { double x, y, z, w; };
 	};
-	IntelVector() noexcept : m{_mm_setzero_pd(), _mm_setzero_pd()} {}
-	IntelVector(double splat) noexcept : m{_mm_set1_pd(splat), _mm_set1_pd(splat)} {}
-	IntelVector(double x_, double y_, double z_, double w_) noexcept : m{_mm_set_pd(y_, x_), _mm_set_pd(w_, z_)} {}
-	[[nodiscard]] double& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const double& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{} { if (!std::is_constant_evaluated()) m = {_mm_setzero_pd(), _mm_setzero_pd()}; }
+	constexpr IntelVector(double splat) noexcept : e{splat, splat, splat, splat} { if (!std::is_constant_evaluated()) m = {_mm_set1_pd(splat), _mm_set1_pd(splat)}; }
+	constexpr IntelVector(double x_, double y_, double z_, double w_) noexcept : e{x_, y_, z_, w_} { if (!std::is_constant_evaluated()) m = {_mm_set_pd(y_, x_), _mm_set_pd(w_, z_)}; }
+	[[nodiscard]] constexpr double& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const double& operator[](int index) const noexcept { return e[index]; }
 };
 
 ///----------------------------------------
@@ -160,11 +166,11 @@ struct IntelVector<uint8_t, 3> {
 	union {
 		uint8_t e[3];
 	};
-	IntelVector() noexcept : e{0, 0, 0} {}
-	IntelVector(uint8_t splat) noexcept : e{splat, splat, splat} {}
-	IntelVector(uint8_t x_, uint8_t y_, uint8_t z_) noexcept : e{x_, y_, z_} {}
-	[[nodiscard]] uint8_t& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const uint8_t& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{0, 0, 0} {}
+	constexpr IntelVector(uint8_t splat) noexcept : e{splat, splat, splat} {}
+	constexpr IntelVector(uint8_t x_, uint8_t y_, uint8_t z_) noexcept : e{x_, y_, z_} {}
+	[[nodiscard]] constexpr uint8_t& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const uint8_t& operator[](int index) const noexcept { return e[index]; }
 };
 
 template <>
@@ -172,12 +178,39 @@ struct IntelVector<uint8_t, 4> {
 	union {
 		uint8_t e[4];
 	};
-	IntelVector() noexcept : e{0, 0, 0, 0} {}
-	IntelVector(uint8_t splat) noexcept : e{splat, splat, splat, splat} {}
-	IntelVector(uint8_t x_, uint8_t y_, uint8_t z_, uint8_t w_) noexcept : e{x_, y_, z_, w_} {}
-	[[nodiscard]] uint8_t& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const uint8_t& operator[](int index) const noexcept { return e[index]; }
+	constexpr IntelVector() noexcept : e{0, 0, 0, 0} {}
+	constexpr IntelVector(uint8_t splat) noexcept : e{splat, splat, splat, splat} {}
+	constexpr IntelVector(uint8_t x_, uint8_t y_, uint8_t z_, uint8_t w_) noexcept : e{x_, y_, z_, w_} {}
+	[[nodiscard]] constexpr uint8_t& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const uint8_t& operator[](int index) const noexcept { return e[index]; }
 };
+
+///----------------------------------------
+/// @brief Applies @p operation to each pair of logical lanes of @p a and @p b — the path the operators
+///        below take during constant evaluation, where the intrinsics cannot run.
+/// @details Only the @p Count logical lanes are written; a 3-vector's padding lane keeps the zero its
+///          constructor left there, where the register path lets arithmetic garbage land in it. Neither
+///          is ever read, so the two paths agree on every value the vector actually carries.
+///----------------------------------------
+
+template <class TScalar, int Count, class TOperation>
+[[nodiscard]] constexpr IntelVector<TScalar, Count> applyToLanes(const IntelVector<TScalar, Count>& a, const IntelVector<TScalar, Count>& b, TOperation operation) noexcept {
+	IntelVector<TScalar, Count> result;
+	for (int lane = 0; lane < Count; ++lane) result[lane] = operation(a[lane], b[lane]);
+	return result;
+}
+
+///----------------------------------------
+/// @brief Applies @p operation to each logical lane of @p a — the unary and vector-with-scalar form of
+///        the constant-evaluation path.
+///----------------------------------------
+
+template <class TScalar, int Count, class TOperation>
+[[nodiscard]] constexpr IntelVector<TScalar, Count> applyToLanes(const IntelVector<TScalar, Count>& a, TOperation operation) noexcept {
+	IntelVector<TScalar, Count> result;
+	for (int lane = 0; lane < Count; ++lane) result[lane] = operation(a[lane]);
+	return result;
+}
 
 ///----------------------------------------
 /// @brief Element-wise arithmetic and scalar broadcasts, found by ADL from the wrapper bodies. The
@@ -185,7 +218,9 @@ struct IntelVector<uint8_t, 4> {
 ///        the @c _mm_*_pd op to both halves, the @c double 2-vector to its single register, and the
 ///        @c uint8_t vectors run per-component. Padding lanes may pick up arithmetic garbage but are
 ///        never read by @ref Backend (dot is restricted to the logical lanes; the flat-buffer matrix
-///        paths touch only the fully-packed 4-wide types).
+///        paths touch only the fully-packed 4-wide types). Every operator is @c constexpr: at run time
+///        it is the register form below, and during constant evaluation — where no intrinsic can run —
+///        it is the lane-by-lane form of @ref applyToLanes.
 ///----------------------------------------
 
 ///----------------------------------------
@@ -194,112 +229,127 @@ struct IntelVector<uint8_t, 4> {
 /// @{
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator+(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator+(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](float x, float y) { return x + y; });
 	IntelVector<float, N> result;
 	result.m = _mm_add_ps(a.m, b.m);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator-(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator-(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](float x, float y) { return x - y; });
 	IntelVector<float, N> result;
 	result.m = _mm_sub_ps(a.m, b.m);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator*(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator*(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](float x, float y) { return x * y; });
 	IntelVector<float, N> result;
 	result.m = _mm_mul_ps(a.m, b.m);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator/(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator/(const IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](float x, float y) { return x / y; });
 	IntelVector<float, N> result;
 	result.m = _mm_div_ps(a.m, b.m);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator-(const IntelVector<float, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator-(const IntelVector<float, N>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [](float x) { return -x; });
 	IntelVector<float, N> result;
 	result.m = _mm_sub_ps(_mm_setzero_ps(), a.m);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator*(const IntelVector<float, N>& a, float scale) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator*(const IntelVector<float, N>& a, float scale) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](float x) { return x * scale; });
 	IntelVector<float, N> result;
 	result.m = _mm_mul_ps(a.m, _mm_set1_ps(scale));
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator*(float scale, const IntelVector<float, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator*(float scale, const IntelVector<float, N>& a) noexcept {
 	return a * scale;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator/(const IntelVector<float, N>& a, float scale) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator/(const IntelVector<float, N>& a, float scale) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](float x) { return x / scale; });
 	IntelVector<float, N> result;
 	result.m = _mm_div_ps(a.m, _mm_set1_ps(scale));
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator/(float scale, const IntelVector<float, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator/(float scale, const IntelVector<float, N>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](float x) { return scale / x; });
 	IntelVector<float, N> result;
 	result.m = _mm_div_ps(_mm_set1_ps(scale), a.m);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator+(const IntelVector<float, N>& a, float scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator+(const IntelVector<float, N>& a, float scalar) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](float x) { return x + scalar; });
 	IntelVector<float, N> result;
 	result.m = _mm_add_ps(a.m, _mm_set1_ps(scalar));
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator+(float scalar, const IntelVector<float, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator+(float scalar, const IntelVector<float, N>& a) noexcept {
 	return a + scalar;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator-(const IntelVector<float, N>& a, float scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator-(const IntelVector<float, N>& a, float scalar) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](float x) { return x - scalar; });
 	IntelVector<float, N> result;
 	result.m = _mm_sub_ps(a.m, _mm_set1_ps(scalar));
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<float, N> operator-(float scalar, const IntelVector<float, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<float, N> operator-(float scalar, const IntelVector<float, N>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](float x) { return scalar - x; });
 	IntelVector<float, N> result;
 	result.m = _mm_sub_ps(_mm_set1_ps(scalar), a.m);
 	return result;
 }
 
 template <int N>
-inline IntelVector<float, N>& operator+=(IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+constexpr IntelVector<float, N>& operator+=(IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] += b[lane]; return a; }
 	a.m = _mm_add_ps(a.m, b.m);
 	return a;
 }
 
 template <int N>
-inline IntelVector<float, N>& operator-=(IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+constexpr IntelVector<float, N>& operator-=(IntelVector<float, N>& a, const IntelVector<float, N>& b) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] -= b[lane]; return a; }
 	a.m = _mm_sub_ps(a.m, b.m);
 	return a;
 }
 
 template <int N>
-inline IntelVector<float, N>& operator*=(IntelVector<float, N>& a, float scale) noexcept {
+constexpr IntelVector<float, N>& operator*=(IntelVector<float, N>& a, float scale) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] *= scale; return a; }
 	a.m = _mm_mul_ps(a.m, _mm_set1_ps(scale));
 	return a;
 }
 
 template <int N>
-inline IntelVector<float, N>& operator/=(IntelVector<float, N>& a, float scale) noexcept {
+constexpr IntelVector<float, N>& operator/=(IntelVector<float, N>& a, float scale) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] /= scale; return a; }
 	a.m = _mm_div_ps(a.m, _mm_set1_ps(scale));
 	return a;
 }
@@ -311,96 +361,111 @@ inline IntelVector<float, N>& operator/=(IntelVector<float, N>& a, float scale) 
 ///----------------------------------------
 /// @{
 
-[[nodiscard]] inline IntelVector<double, 2> operator+(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator+(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x + y; });
 	IntelVector<double, 2> result;
 	result.m = _mm_add_pd(a.m, b.m);
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator-(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator-(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x - y; });
 	IntelVector<double, 2> result;
 	result.m = _mm_sub_pd(a.m, b.m);
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator*(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator*(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x * y; });
 	IntelVector<double, 2> result;
 	result.m = _mm_mul_pd(a.m, b.m);
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator/(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator/(const IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x / y; });
 	IntelVector<double, 2> result;
 	result.m = _mm_div_pd(a.m, b.m);
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator-(const IntelVector<double, 2>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator-(const IntelVector<double, 2>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [](double x) { return -x; });
 	IntelVector<double, 2> result;
 	result.m = _mm_sub_pd(_mm_setzero_pd(), a.m);
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator*(const IntelVector<double, 2>& a, double scale) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator*(const IntelVector<double, 2>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](double x) { return x * scale; });
 	IntelVector<double, 2> result;
 	result.m = _mm_mul_pd(a.m, _mm_set1_pd(scale));
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator*(double scale, const IntelVector<double, 2>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator*(double scale, const IntelVector<double, 2>& a) noexcept {
 	return a * scale;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator/(const IntelVector<double, 2>& a, double scale) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator/(const IntelVector<double, 2>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](double x) { return x / scale; });
 	IntelVector<double, 2> result;
 	result.m = _mm_div_pd(a.m, _mm_set1_pd(scale));
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator/(double scale, const IntelVector<double, 2>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator/(double scale, const IntelVector<double, 2>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](double x) { return scale / x; });
 	IntelVector<double, 2> result;
 	result.m = _mm_div_pd(_mm_set1_pd(scale), a.m);
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator+(const IntelVector<double, 2>& a, double scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator+(const IntelVector<double, 2>& a, double scalar) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](double x) { return x + scalar; });
 	IntelVector<double, 2> result;
 	result.m = _mm_add_pd(a.m, _mm_set1_pd(scalar));
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator+(double scalar, const IntelVector<double, 2>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator+(double scalar, const IntelVector<double, 2>& a) noexcept {
 	return a + scalar;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator-(const IntelVector<double, 2>& a, double scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator-(const IntelVector<double, 2>& a, double scalar) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](double x) { return x - scalar; });
 	IntelVector<double, 2> result;
 	result.m = _mm_sub_pd(a.m, _mm_set1_pd(scalar));
 	return result;
 }
 
-[[nodiscard]] inline IntelVector<double, 2> operator-(double scalar, const IntelVector<double, 2>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, 2> operator-(double scalar, const IntelVector<double, 2>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](double x) { return scalar - x; });
 	IntelVector<double, 2> result;
 	result.m = _mm_sub_pd(_mm_set1_pd(scalar), a.m);
 	return result;
 }
 
-inline IntelVector<double, 2>& operator+=(IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+constexpr IntelVector<double, 2>& operator+=(IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < 2; ++lane) a[lane] += b[lane]; return a; }
 	a.m = _mm_add_pd(a.m, b.m);
 	return a;
 }
 
-inline IntelVector<double, 2>& operator-=(IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+constexpr IntelVector<double, 2>& operator-=(IntelVector<double, 2>& a, const IntelVector<double, 2>& b) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < 2; ++lane) a[lane] -= b[lane]; return a; }
 	a.m = _mm_sub_pd(a.m, b.m);
 	return a;
 }
 
-inline IntelVector<double, 2>& operator*=(IntelVector<double, 2>& a, double scale) noexcept {
+constexpr IntelVector<double, 2>& operator*=(IntelVector<double, 2>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < 2; ++lane) a[lane] *= scale; return a; }
 	a.m = _mm_mul_pd(a.m, _mm_set1_pd(scale));
 	return a;
 }
 
-inline IntelVector<double, 2>& operator/=(IntelVector<double, 2>& a, double scale) noexcept {
+constexpr IntelVector<double, 2>& operator/=(IntelVector<double, 2>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < 2; ++lane) a[lane] /= scale; return a; }
 	a.m = _mm_div_pd(a.m, _mm_set1_pd(scale));
 	return a;
 }
@@ -413,7 +478,8 @@ inline IntelVector<double, 2>& operator/=(IntelVector<double, 2>& a, double scal
 /// @{
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator+(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator+(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x + y; });
 	IntelVector<double, N> result;
 	result.m.lo = _mm_add_pd(a.m.lo, b.m.lo);
 	result.m.hi = _mm_add_pd(a.m.hi, b.m.hi);
@@ -421,7 +487,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator-(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator-(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x - y; });
 	IntelVector<double, N> result;
 	result.m.lo = _mm_sub_pd(a.m.lo, b.m.lo);
 	result.m.hi = _mm_sub_pd(a.m.hi, b.m.hi);
@@ -429,7 +496,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator*(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator*(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x * y; });
 	IntelVector<double, N> result;
 	result.m.lo = _mm_mul_pd(a.m.lo, b.m.lo);
 	result.m.hi = _mm_mul_pd(a.m.hi, b.m.hi);
@@ -437,7 +505,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator/(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator/(const IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, b, [](double x, double y) { return x / y; });
 	IntelVector<double, N> result;
 	result.m.lo = _mm_div_pd(a.m.lo, b.m.lo);
 	result.m.hi = _mm_div_pd(a.m.hi, b.m.hi);
@@ -445,7 +514,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator-(const IntelVector<double, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator-(const IntelVector<double, N>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [](double x) { return -x; });
 	IntelVector<double, N> result;
 	result.m.lo = _mm_sub_pd(_mm_setzero_pd(), a.m.lo);
 	result.m.hi = _mm_sub_pd(_mm_setzero_pd(), a.m.hi);
@@ -453,7 +523,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator*(const IntelVector<double, N>& a, double scale) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator*(const IntelVector<double, N>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](double x) { return x * scale; });
 	IntelVector<double, N> result;
 	__m128d s = _mm_set1_pd(scale);
 	result.m.lo = _mm_mul_pd(a.m.lo, s);
@@ -462,12 +533,13 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator*(double scale, const IntelVector<double, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator*(double scale, const IntelVector<double, N>& a) noexcept {
 	return a * scale;
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator/(const IntelVector<double, N>& a, double scale) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator/(const IntelVector<double, N>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](double x) { return x / scale; });
 	IntelVector<double, N> result;
 	__m128d s = _mm_set1_pd(scale);
 	result.m.lo = _mm_div_pd(a.m.lo, s);
@@ -476,7 +548,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator/(double scale, const IntelVector<double, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator/(double scale, const IntelVector<double, N>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scale](double x) { return scale / x; });
 	IntelVector<double, N> result;
 	__m128d s = _mm_set1_pd(scale);
 	result.m.lo = _mm_div_pd(s, a.m.lo);
@@ -485,7 +558,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator+(const IntelVector<double, N>& a, double scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator+(const IntelVector<double, N>& a, double scalar) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](double x) { return x + scalar; });
 	IntelVector<double, N> result;
 	__m128d s = _mm_set1_pd(scalar);
 	result.m.lo = _mm_add_pd(a.m.lo, s);
@@ -494,12 +568,13 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator+(double scalar, const IntelVector<double, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator+(double scalar, const IntelVector<double, N>& a) noexcept {
 	return a + scalar;
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator-(const IntelVector<double, N>& a, double scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator-(const IntelVector<double, N>& a, double scalar) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](double x) { return x - scalar; });
 	IntelVector<double, N> result;
 	__m128d s = _mm_set1_pd(scalar);
 	result.m.lo = _mm_sub_pd(a.m.lo, s);
@@ -508,7 +583,8 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-[[nodiscard]] inline IntelVector<double, N> operator-(double scalar, const IntelVector<double, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<double, N> operator-(double scalar, const IntelVector<double, N>& a) noexcept {
+	if (std::is_constant_evaluated()) return applyToLanes(a, [scalar](double x) { return scalar - x; });
 	IntelVector<double, N> result;
 	__m128d s = _mm_set1_pd(scalar);
 	result.m.lo = _mm_sub_pd(s, a.m.lo);
@@ -517,21 +593,24 @@ template <int N> requires (N == 3 || N == 4)
 }
 
 template <int N> requires (N == 3 || N == 4)
-inline IntelVector<double, N>& operator+=(IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+constexpr IntelVector<double, N>& operator+=(IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] += b[lane]; return a; }
 	a.m.lo = _mm_add_pd(a.m.lo, b.m.lo);
 	a.m.hi = _mm_add_pd(a.m.hi, b.m.hi);
 	return a;
 }
 
 template <int N> requires (N == 3 || N == 4)
-inline IntelVector<double, N>& operator-=(IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+constexpr IntelVector<double, N>& operator-=(IntelVector<double, N>& a, const IntelVector<double, N>& b) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] -= b[lane]; return a; }
 	a.m.lo = _mm_sub_pd(a.m.lo, b.m.lo);
 	a.m.hi = _mm_sub_pd(a.m.hi, b.m.hi);
 	return a;
 }
 
 template <int N> requires (N == 3 || N == 4)
-inline IntelVector<double, N>& operator*=(IntelVector<double, N>& a, double scale) noexcept {
+constexpr IntelVector<double, N>& operator*=(IntelVector<double, N>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] *= scale; return a; }
 	__m128d s = _mm_set1_pd(scale);
 	a.m.lo = _mm_mul_pd(a.m.lo, s);
 	a.m.hi = _mm_mul_pd(a.m.hi, s);
@@ -539,7 +618,8 @@ inline IntelVector<double, N>& operator*=(IntelVector<double, N>& a, double scal
 }
 
 template <int N> requires (N == 3 || N == 4)
-inline IntelVector<double, N>& operator/=(IntelVector<double, N>& a, double scale) noexcept {
+constexpr IntelVector<double, N>& operator/=(IntelVector<double, N>& a, double scale) noexcept {
+	if (std::is_constant_evaluated()) { for (int lane = 0; lane < N; ++lane) a[lane] /= scale; return a; }
 	__m128d s = _mm_set1_pd(scale);
 	a.m.lo = _mm_div_pd(a.m.lo, s);
 	a.m.hi = _mm_div_pd(a.m.hi, s);
@@ -554,112 +634,112 @@ inline IntelVector<double, N>& operator/=(IntelVector<double, N>& a, double scal
 /// @{
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator+(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator+(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] + b[i];
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator-(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator-(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] - b[i];
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator*(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator*(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] * b[i];
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator/(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator/(const IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] / b[i];
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator-(const IntelVector<uint8_t, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator-(const IntelVector<uint8_t, N>& a) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = uint8_t(-a[i]);
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator*(const IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator*(const IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] * scale;
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator*(uint8_t scale, const IntelVector<uint8_t, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator*(uint8_t scale, const IntelVector<uint8_t, N>& a) noexcept {
 	return a * scale;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator/(const IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator/(const IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] / scale;
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator/(uint8_t scale, const IntelVector<uint8_t, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator/(uint8_t scale, const IntelVector<uint8_t, N>& a) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = scale / a[i];
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator+(const IntelVector<uint8_t, N>& a, uint8_t scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator+(const IntelVector<uint8_t, N>& a, uint8_t scalar) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] + scalar;
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator+(uint8_t scalar, const IntelVector<uint8_t, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator+(uint8_t scalar, const IntelVector<uint8_t, N>& a) noexcept {
 	return a + scalar;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator-(const IntelVector<uint8_t, N>& a, uint8_t scalar) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator-(const IntelVector<uint8_t, N>& a, uint8_t scalar) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] - scalar;
 	return result;
 }
 
 template <int N>
-[[nodiscard]] inline IntelVector<uint8_t, N> operator-(uint8_t scalar, const IntelVector<uint8_t, N>& a) noexcept {
+[[nodiscard]] constexpr IntelVector<uint8_t, N> operator-(uint8_t scalar, const IntelVector<uint8_t, N>& a) noexcept {
 	IntelVector<uint8_t, N> result;
 	for (int i = 0; i < N; ++i) result[i] = scalar - a[i];
 	return result;
 }
 
 template <int N>
-inline IntelVector<uint8_t, N>& operator+=(IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
+constexpr IntelVector<uint8_t, N>& operator+=(IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
 	for (int i = 0; i < N; ++i) a[i] += b[i];
 	return a;
 }
 
 template <int N>
-inline IntelVector<uint8_t, N>& operator-=(IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
+constexpr IntelVector<uint8_t, N>& operator-=(IntelVector<uint8_t, N>& a, const IntelVector<uint8_t, N>& b) noexcept {
 	for (int i = 0; i < N; ++i) a[i] -= b[i];
 	return a;
 }
 
 template <int N>
-inline IntelVector<uint8_t, N>& operator*=(IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
+constexpr IntelVector<uint8_t, N>& operator*=(IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
 	for (int i = 0; i < N; ++i) a[i] *= scale;
 	return a;
 }
 
 template <int N>
-inline IntelVector<uint8_t, N>& operator/=(IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
+constexpr IntelVector<uint8_t, N>& operator/=(IntelVector<uint8_t, N>& a, uint8_t scale) noexcept {
 	for (int i = 0; i < N; ++i) a[i] /= scale;
 	return a;
 }

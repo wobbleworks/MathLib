@@ -46,11 +46,11 @@ struct GenericVector<TScalar, 2> {
 		TScalar e[2];
 		struct { TScalar x, y; };
 	};
-	GenericVector() noexcept : e{TScalar(0), TScalar(0)} {}
-	GenericVector(TScalar splat) noexcept : e{splat, splat} {}
-	GenericVector(TScalar x_, TScalar y_) noexcept : e{x_, y_} {}
-	[[nodiscard]] TScalar& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const TScalar& operator[](int index) const noexcept { return e[index]; }
+	constexpr GenericVector() noexcept : e{TScalar(0), TScalar(0)} {}
+	constexpr GenericVector(TScalar splat) noexcept : e{splat, splat} {}
+	constexpr GenericVector(TScalar x_, TScalar y_) noexcept : e{x_, y_} {}
+	[[nodiscard]] constexpr TScalar& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const TScalar& operator[](int index) const noexcept { return e[index]; }
 };
 
 template <class TScalar>
@@ -59,11 +59,11 @@ struct GenericVector<TScalar, 3> {
 		TScalar e[3];
 		struct { TScalar x, y, z; };
 	};
-	GenericVector() noexcept : e{TScalar(0), TScalar(0), TScalar(0)} {}
-	GenericVector(TScalar splat) noexcept : e{splat, splat, splat} {}
-	GenericVector(TScalar x_, TScalar y_, TScalar z_) noexcept : e{x_, y_, z_} {}
-	[[nodiscard]] TScalar& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const TScalar& operator[](int index) const noexcept { return e[index]; }
+	constexpr GenericVector() noexcept : e{TScalar(0), TScalar(0), TScalar(0)} {}
+	constexpr GenericVector(TScalar splat) noexcept : e{splat, splat, splat} {}
+	constexpr GenericVector(TScalar x_, TScalar y_, TScalar z_) noexcept : e{x_, y_, z_} {}
+	[[nodiscard]] constexpr TScalar& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const TScalar& operator[](int index) const noexcept { return e[index]; }
 };
 
 template <class TScalar>
@@ -72,11 +72,11 @@ struct GenericVector<TScalar, 4> {
 		TScalar e[4];
 		struct { TScalar x, y, z, w; };
 	};
-	GenericVector() noexcept : e{TScalar(0), TScalar(0), TScalar(0), TScalar(0)} {}
-	GenericVector(TScalar splat) noexcept : e{splat, splat, splat, splat} {}
-	GenericVector(TScalar x_, TScalar y_, TScalar z_, TScalar w_) noexcept : e{x_, y_, z_, w_} {}
-	[[nodiscard]] TScalar& operator[](int index) noexcept { return e[index]; }
-	[[nodiscard]] const TScalar& operator[](int index) const noexcept { return e[index]; }
+	constexpr GenericVector() noexcept : e{TScalar(0), TScalar(0), TScalar(0), TScalar(0)} {}
+	constexpr GenericVector(TScalar splat) noexcept : e{splat, splat, splat, splat} {}
+	constexpr GenericVector(TScalar x_, TScalar y_, TScalar z_, TScalar w_) noexcept : e{x_, y_, z_, w_} {}
+	[[nodiscard]] constexpr TScalar& operator[](int index) noexcept { return e[index]; }
+	[[nodiscard]] constexpr const TScalar& operator[](int index) const noexcept { return e[index]; }
 };
 
 ///----------------------------------------
@@ -84,112 +84,112 @@ struct GenericVector<TScalar, 4> {
 ///----------------------------------------
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator+(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator+(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] + b[i];
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator-(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator-(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] - b[i];
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator*(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator*(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] * b[i];
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator/(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator/(const GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] / b[i];
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator-(const GenericVector<T, N>& a) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator-(const GenericVector<T, N>& a) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = -a[i];
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator*(const GenericVector<T, N>& a, T scale) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator*(const GenericVector<T, N>& a, T scale) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] * scale;
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator*(T scale, const GenericVector<T, N>& a) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator*(T scale, const GenericVector<T, N>& a) noexcept {
 	return a * scale;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator/(const GenericVector<T, N>& a, T scale) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator/(const GenericVector<T, N>& a, T scale) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] / scale;
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator/(T scale, const GenericVector<T, N>& a) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator/(T scale, const GenericVector<T, N>& a) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = scale / a[i];
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator+(const GenericVector<T, N>& a, T scalar) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator+(const GenericVector<T, N>& a, T scalar) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] + scalar;
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator+(T scalar, const GenericVector<T, N>& a) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator+(T scalar, const GenericVector<T, N>& a) noexcept {
 	return a + scalar;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator-(const GenericVector<T, N>& a, T scalar) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator-(const GenericVector<T, N>& a, T scalar) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = a[i] - scalar;
 	return result;
 }
 
 template <class T, int N>
-[[nodiscard]] inline GenericVector<T, N> operator-(T scalar, const GenericVector<T, N>& a) noexcept {
+[[nodiscard]] constexpr GenericVector<T, N> operator-(T scalar, const GenericVector<T, N>& a) noexcept {
 	GenericVector<T, N> result;
 	for (int i = 0; i < N; ++i) result[i] = scalar - a[i];
 	return result;
 }
 
 template <class T, int N>
-inline GenericVector<T, N>& operator+=(GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
+constexpr GenericVector<T, N>& operator+=(GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
 	for (int i = 0; i < N; ++i) a[i] += b[i];
 	return a;
 }
 
 template <class T, int N>
-inline GenericVector<T, N>& operator-=(GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
+constexpr GenericVector<T, N>& operator-=(GenericVector<T, N>& a, const GenericVector<T, N>& b) noexcept {
 	for (int i = 0; i < N; ++i) a[i] -= b[i];
 	return a;
 }
 
 template <class T, int N>
-inline GenericVector<T, N>& operator*=(GenericVector<T, N>& a, T scale) noexcept {
+constexpr GenericVector<T, N>& operator*=(GenericVector<T, N>& a, T scale) noexcept {
 	for (int i = 0; i < N; ++i) a[i] *= scale;
 	return a;
 }
 
 template <class T, int N>
-inline GenericVector<T, N>& operator/=(GenericVector<T, N>& a, T scale) noexcept {
+constexpr GenericVector<T, N>& operator/=(GenericVector<T, N>& a, T scale) noexcept {
 	for (int i = 0; i < N; ++i) a[i] /= scale;
 	return a;
 }
