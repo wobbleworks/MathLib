@@ -24,6 +24,8 @@
 #include "MathLib/CubicPolynomial.h"
 #include "MathLib/HalfFloat.h"
 #include "MathLib/Matrix.h"
+#include "MathLib/Plane.h"
+#include "MathLib/Frustum.h"
 #include "MathLib/OneEuroFilter.h"
 #include "MathLib/PerlinNoise.h"
 #include "MathLib/PolarCoordinates.h"
@@ -105,6 +107,18 @@ inline Core::selftest::FunctionTestRegistrar _quaternionSelfTest("Quaternion", q
 ///----------------------------------------
 
 inline Core::selftest::FunctionTestRegistrar _matrixSelfTest("Matrix", matrixSelfTest);
+
+///----------------------------------------
+/// @brief Registers @ref planeSelfTest; runs once in a debug build.
+///----------------------------------------
+
+inline Core::selftest::FunctionTestRegistrar _planeSelfTest("Plane", planeSelfTest);
+
+///----------------------------------------
+/// @brief Registers @ref frustumSelfTest; runs once in a debug build.
+///----------------------------------------
+
+inline Core::selftest::FunctionTestRegistrar _frustumSelfTest("Frustum", frustumSelfTest);
 
 ///----------------------------------------
 /// @brief Registers @ref vectorSelfTest (the hand-written axis rotations); runs once in a debug build.
