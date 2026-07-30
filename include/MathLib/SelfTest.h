@@ -19,9 +19,11 @@
 #include "MathLib/Angle.h"
 #include "MathLib/BlackbodyColor.h"
 #include "MathLib/Blast.h"
+#include "MathLib/Camera.h"
 #include "MathLib/CatmullRom.h"
 #include "MathLib/Color.h"
 #include "MathLib/CubicPolynomial.h"
+#include "MathLib/FieldOfView.h"
 #include "MathLib/HalfFloat.h"
 #include "MathLib/Matrix.h"
 #include "MathLib/Plane.h"
@@ -119,6 +121,18 @@ inline Core::selftest::FunctionTestRegistrar _planeSelfTest("Plane", planeSelfTe
 ///----------------------------------------
 
 inline Core::selftest::FunctionTestRegistrar _frustumSelfTest("Frustum", frustumSelfTest);
+
+///----------------------------------------
+/// @brief Registers @ref fieldOfViewSelfTest; runs once in a debug build.
+///----------------------------------------
+
+inline Core::selftest::FunctionTestRegistrar _fieldOfViewSelfTest("FieldOfView", fieldOfViewSelfTest);
+
+///----------------------------------------
+/// @brief Registers @ref cameraSelfTest; runs once in a debug build.
+///----------------------------------------
+
+inline Core::selftest::FunctionTestRegistrar _cameraSelfTest("Camera", cameraSelfTest);
 
 ///----------------------------------------
 /// @brief Registers @ref vectorSelfTest (the hand-written axis rotations); runs once in a debug build.
