@@ -334,6 +334,87 @@ struct CameraSettings final {
 };
 
 ///----------------------------------------
+/// @struct ParallaxFraming
+/// @brief The matched pair of settings that shift a view around a fixed window: where the eye goes, and
+///        the frustum that holds the window still while it goes there.
+/// @details Produced by @ref Math::parallaxFraming, and produced together because they are only correct
+///          together. Apply both — @ref applyTo does it in one step.
+///----------------------------------------
+
+struct ParallaxFraming final {
+	/// @brief For @ref Math::CameraSettings::riderTransform.
+	Double4x4 riderTransform = Double4x4::identity();
+	
+	/// @brief For @ref Math::CameraSettings::frustumTangents.
+	FrustumTangents tangents;
+	
+	/// @brief How far the eye moved, in view space and world units. Exposed for inspection; applying
+	///        @ref riderTransform already accounts for it.
+	Double3 eyeDisplacement{0, 0, 0};
+	
+	/// @brief Writes both settings at once, so neither can be applied without the other.
+	void applyTo(CameraSettings &settings) const noexcept {
+		settings.riderTransform = riderTransform;
+		settings.frustumTangents = tangents;
+	}
+};
+
+///----------------------------------------
+///   @brief Shifts a view around a window fixed at @p anchorDepth, as though the viewer had moved behind
+///          it — the effect Luminos drives from the motion sensors and calls the hologram.
+/// @details Two things have to happen together and neither is the effect on its own. The frustum shears so
+///          the window stays put, and the eye actually moves so that nearer and further content separate.
+///          Shear alone slides the whole image with no depth to it; movement alone swings the window away
+///          with everything else. Producing them from one call is the point: they share a displacement, and
+///          computing that displacement twice is how the two drift apart and the effect turns to mush.
+///
+///          Content at @p anchorDepth does not move at all. Content beyond it moves in proportion, out to a
+///          limit of @p nudge at infinite distance. That gradient is what reads as depth.
+///
+///          Only the eye's displacement scales with @p anchorDepth; the frustum shear does not depend on it
+///          at all. So the anchor sets where the motionless plane sits, and the nudge sets how far the sky
+///          swings — the two knobs are independent, which is what makes this tunable by feel.
+///   @param baseTangents The framing to shift, unnudged. May be asymmetric.
+///   @param anchorDepth Distance to the plane that should stay still, in world units. **Zero anchors
+///          nothing** — the eye stays put and the image slides uniformly, which is the right answer for an
+///          all-sky view where there is no finite depth to hold on to. Negative is clamped to zero.
+///   @param nudge How far to shift, in half-frames of the parallax at infinite distance: @c 1 swings the
+///          far field by half the frame. @c +x moves the viewer right, @c +y moves the viewer down,
+///          matching the screen orientation the rest of @ref Math::CameraSettings uses. Not clamped —
+///          beyond @c ±1 the frustum simply goes off centre, which stays valid.
+///    @note The window keeps its width: each side gives up exactly what the opposite side gains, so the
+///          framing shears rather than zooms. The angle that width subtends drifts by a fraction of a
+///          degree as it goes, an off-centre frustum spanning slightly less angle than a centred one of the
+///          same extent — visible in @ref CameraView::fieldOfViewRadians, not in the image.
+///----------------------------------------
+
+[[nodiscard]] inline ParallaxFraming parallaxFraming(const FrustumTangents &baseTangents, double anchorDepth, const Double2 &nudge) noexcept {
+	// The window's half-extent at unit depth. Multiplying by the anchor depth gives the real window, but the
+	// shear below needs only the ratio, which is why the anchor cancels out of the tangents.
+	const double halfHorizontalSpan = (baseTangents.left + baseTangents.right) / 2;
+	const double halfVerticalSpan = (baseTangents.top + baseTangents.bottom) / 2;
+	const double depth = std::max(anchorDepth, 0.0);
+	
+	// The nudge is screen-oriented and view space is y-up, so the vertical displacement is negated once here.
+	const Double3 displacement(nudge.x * halfHorizontalSpan * depth, -nudge.y * halfVerticalSpan * depth, 0);
+	
+	ParallaxFraming framing;
+	framing.eyeDisplacement = displacement;
+	
+	// riderTransform maps platform space into eye space, so moving the eye by +d shifts that space by -d.
+	framing.riderTransform = translationMatrix(-displacement);
+	
+	// Each side gives up exactly what the opposite side gains, so the total span — and with it the field of
+	// view — comes through unchanged.
+	framing.tangents = FrustumTangents{
+		.left = baseTangents.left + nudge.x * halfHorizontalSpan,
+		.right = baseTangents.right - nudge.x * halfHorizontalSpan,
+		.top = baseTangents.top + nudge.y * halfVerticalSpan,
+		.bottom = baseTangents.bottom - nudge.y * halfVerticalSpan};
+	return framing;
+}
+
+///----------------------------------------
 /// @class CameraView
 /// @brief Everything derived from one @ref Math::CameraSettings: transforms, inverses, frusta and projection.
 /// @details Computed once in the constructor and immutable thereafter, so every accessor describes the
@@ -349,6 +430,12 @@ public:
 	///----------------------------------------
 	
 	explicit CameraView(const CameraSettings &settings) noexcept;
+	
+	///----------------------------------------
+	/// @brief The view of default settings — so the type can be stored in an array and filled in later.
+	///----------------------------------------
+	
+	CameraView() noexcept : CameraView(CameraSettings{}) {}
 	
 	///----------------------------------------
 	/// @brief The settings this view was derived from.
@@ -687,11 +774,16 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	const bool perspective = _settings.projection != Projection::orthographic;
 	const bool hasExplicitTangents = _settings.frustumTangents.has_value();
 	
+	// An infinite projection has no far plane, so farDepth genuinely does not participate and must not be
+	// able to invalidate the camera — otherwise pushing the near plane past a stale default silently kills
+	// a camera whose far plane was never going to be read.
+	const bool usesFarDepth = _settings.projection != Projection::infinitePerspective;
+	
 	// Everything below divides by one of these. A collapsed viewport, an inverted depth range or a
 	// non-positive near plane leaves nothing to see, and propagating the resulting infinities into the
 	// transforms would hand the caller geometry that silently poisons whatever it touches.
 	if (!(viewportWidth > 0) || !(viewportHeight > 0)
-	 || !(_settings.farDepth > _settings.nearDepth)
+	 || (usesFarDepth && !(_settings.farDepth > _settings.nearDepth))
 	 || (perspective && !(_settings.nearDepth > 0))
 	 || (!perspective && !(_settings.orthographicHeight > 0))) {
 		return;
@@ -765,9 +857,11 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 		case Projection::infinitePerspective:
 			// Retarget the finite frustum's depth rather than building a symmetric infinite projection and
 			// bolting the clip rectangle on afterwards: this keeps the off-axis terms in place, so the
-			// matrix and its inverse describe the same volume.
+			// matrix and its inverse describe the same volume. The placeholder far plane is a stand-in for
+			// the one being discarded — every term it touches is overwritten by the retarget, and feeding
+			// the real farDepth in would put an infinity through the arithmetic on its way to being replaced.
 			projectionCore = withInfinitePerspectiveNearZ(
-				frustumMatrix(extentLeft, extentTop, extentRight, extentBottom, _settings.nearDepth, _settings.farDepth),
+				frustumMatrix(extentLeft, extentTop, extentRight, extentBottom, _settings.nearDepth, 2 * _settings.nearDepth),
 				_settings.nearDepth);
 			break;
 			
@@ -1091,6 +1185,248 @@ private:
 	std::shared_ptr<const CameraSettings> _settings;
 	mutable std::shared_ptr<const CameraView> _view;
 };
+
+///----------------------------------------
+/// @brief One eye's departure from the shared viewpoint: where it sits, what it sees, and where it lands.
+/// @details Everything an eye does *not* have here — platform pose, head pose, depth range, projection
+///          mode, depth convention — it takes from @ref Math::StereoCameraSettings::shared, so two eyes
+///          cannot disagree about any of it.
+///----------------------------------------
+
+struct EyeSettings final {
+	///----------------------------------------
+	/// @brief This eye's displacement from the shared viewpoint, mapping device space into eye space.
+	/// @details Composed onto the shared @c riderTransform, so the head pose stays in one place and only
+	///          the offset between the eyes lives here. Its translation must be in the same units as the
+	///          rest of the camera's world — see @ref Math::StereoCameraView for why that is never in doubt.
+	///----------------------------------------
+	
+	Double4x4 eyeFromDevice = Double4x4::identity();
+	
+	/// @brief This eye's frustum. Independent per eye, because a headset's two eyes look through different
+	///        parts of their optics and neither frustum is centred.
+	FrustumTangents tangents;
+	
+	/// @brief This eye's pixels, when they differ from @c shared.viewport — a side-by-side layout puts the
+	///        two eyes in different regions of one texture. Left unset when both eyes fill the same bounds.
+	std::optional<rect_double> viewport;
+	
+	[[nodiscard]] bool operator==(const EyeSettings &) const = default;
+};
+
+///----------------------------------------
+/// @struct StereoCameraSettings
+/// @brief A shared viewpoint plus the per-eye departures from it.
+///----------------------------------------
+
+struct StereoCameraSettings final {
+	/// @brief How many eyes this type can carry. Raise it the day something needs more.
+	static constexpr size_t maxEyeCount = 2;
+	
+	///----------------------------------------
+	///   @brief Everything the eyes hold in common: platform pose, head pose, projection, depth range and
+	///          convention, obstruction margins.
+	/// @details Its @c viewport is what @ref StereoCameraView::centerView measures angular scale against, so
+	///          set it to one eye's pixel dimensions — that makes @c pixelsPerRadian report a per-eye figure,
+	///          which is what label sizing and level-of-detail thresholds want.
+	///    @note Its @c frustumTangents is ignored; framing comes from the eyes.
+	///----------------------------------------
+	
+	CameraSettings shared;
+	
+	/// @brief The eyes, of which the first @c eyeCount are used.
+	std::array<EyeSettings, maxEyeCount> eyes;
+	
+	/// @brief How many of @c eyes are live. Clamped to @c maxEyeCount; zero leaves nothing to render.
+	size_t eyeCount = maxEyeCount;
+	
+	[[nodiscard]] bool operator==(const StereoCameraSettings &) const = default;
+};
+
+///----------------------------------------
+/// @class StereoCameraView
+/// @brief A consistent snapshot of every eye at once, plus the shared viewpoint they depart from.
+/// @details One object holding every eye is the point. Two independent cameras let a render thread take
+///          eye 0 from one frame and eye 1 from the next, and two eyes describing different worlds for a
+///          frame is precisely what a stereo display punishes; deriving them together makes that
+///          unrepresentable. It also makes the shared half genuinely shared, so the eyes cannot come to
+///          disagree about a depth range or a depth convention.
+///
+///          @ref centerView is the one most consumers want. Distant content is drawn with the view
+///          translation stripped, so both eyes render it from the same place and differ only in
+///          projection — which leaves the centre view as the camera for most of a scene, and the only
+///          sensible answer for angular scale, level of detail and anything asking where the viewer is.
+///          Reach for @ref eyeAt when drawing near-field geometry, where the eye separation is the whole
+///          point, and for nothing else.
+///
+///          There is deliberately no screen-point picking and no per-eye projection helper on this type.
+///          A stereo display has no screen point to pick with, and a world position lands somewhere
+///          different in each eye; both questions have honest answers only once you have named an eye.
+///    @note **Units never enter this type.** The eye displacements and the depth range compose into one
+///          transform, so an application has necessarily already resolved them into a single system before
+///          any of it arrives — which makes the eye separation measurable against the near plane as a pure
+///          ratio. A consequence worth knowing: this makes a view specific to one frame of reference, and
+///          an application drawing a sky in parsecs and a landscape in metres wants one of these per frame,
+///          not one overall.
+///    @note There is no thread-safe holder for this the way @ref Math::Camera holds a @ref Math::CameraView.
+///          The natural arrangement puts the shared viewpoint in a @ref Math::Camera, which crosses threads,
+///          and builds the stereo view on the render thread where the per-eye data arrives — so the holder
+///          would have nothing left to guard.
+///----------------------------------------
+
+class StereoCameraView final {
+///----------------------------------------
+public:
+	///----------------------------------------
+	/// @brief Derives every eye, the centre view and the combined bound from @p settings.
+	///----------------------------------------
+	
+	explicit StereoCameraView(const StereoCameraSettings &settings) noexcept;
+	
+	/// @brief The settings this view was derived from.
+	[[nodiscard]] const StereoCameraSettings &settings() const noexcept { return _settings; }
+	
+	/// @brief Whether every live eye and the centre view are usable.
+	[[nodiscard]] bool isValid() const noexcept { return _isValid; }
+	
+	/// @brief How many eyes are live, after clamping.
+	[[nodiscard]] size_t eyeCount() const noexcept { return _eyeCount; }
+	
+	///----------------------------------------
+	/// @brief One eye's view — the transforms to render that eye's image with.
+	/// @param index Below @ref eyeCount; anything else returns the centre view rather than reading past the end.
+	///----------------------------------------
+	
+	[[nodiscard]] const CameraView &eyeAt(size_t index) const noexcept {
+		return index < _eyeCount ? _eyes[index] : _centerView;
+	}
+	
+	///----------------------------------------
+	///   @brief The shared viewpoint, with no eye displacement, framed by everything the eyes can see between
+	///          them.
+	/// @details The camera for distant content, angular scale, level of detail, and any question about where
+	///          the viewer is rather than where an eye is. Its frustum is exact — both eyes share this
+	///          position for anything drawn translation-stripped — so it is the tighter bound whenever the
+	///          eye separation does not matter.
+	///----------------------------------------
+	
+	[[nodiscard]] const CameraView &centerView() const noexcept { return _centerView; }
+	
+	///----------------------------------------
+	///   @brief A single frustum containing everything any eye can see, for culling once instead of per eye.
+	/// @details Culling per eye costs twice as much and lets an object survive in one eye and not the other,
+	///          which in stereo is worse than drawing it in both. This bound is conservative and holds at
+	///          every depth, including in front of the near plane: it keeps the eyes' own angles and instead
+	///          sets its apex back far enough to clear their displacement, so it contains everything any eye
+	///          can see and converges on the eyes' framing in the distance.
+	///
+	///          What it costs is the sliver of space between the retreated apex and the eyes, which the bound
+	///          includes and no eye can see. That retreat is the eye separation divided by the narrowest of
+	///          the framing tangents — a few centimetres for a headset — so the waste is negligible unless
+	///          something is drawn practically against the viewer's face.
+	///    @note Use @c centerView().frustum() instead for content drawn from the shared position, where the
+	///          eyes coincide and this bound's retreat is pure waste.
+	///----------------------------------------
+	
+	[[nodiscard]] const Frustum3d &combinedFrustum() const noexcept { return _combinedFrustum; }
+	
+private:
+	StereoCameraSettings _settings;
+	std::array<CameraView, StereoCameraSettings::maxEyeCount> _eyes;
+	CameraView _centerView;
+	Frustum3d _combinedFrustum;
+	size_t _eyeCount = 0;
+	bool _isValid = false;
+};
+
+///----------------------------------------
+
+inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) noexcept : _settings(settings) {
+	_eyeCount = std::min(settings.eyeCount, StereoCameraSettings::maxEyeCount);
+	if (_eyeCount == 0) {
+		return;
+	}
+	
+	// The centre is framed by the union of the eyes, so it sees everything any of them can. Each side takes
+	// the most generous eye independently — the eyes are asymmetric in opposite directions, so taking one
+	// eye's frustum whole would clip the other.
+	FrustumTangents unionTangents = settings.eyes[0].tangents;
+	for (size_t index = 1; index < _eyeCount; ++index) {
+		const FrustumTangents &tangents = settings.eyes[index].tangents;
+		unionTangents.left = std::max(unionTangents.left, tangents.left);
+		unionTangents.right = std::max(unionTangents.right, tangents.right);
+		unionTangents.top = std::max(unionTangents.top, tangents.top);
+		unionTangents.bottom = std::max(unionTangents.bottom, tangents.bottom);
+	}
+	
+	CameraSettings centerSettings = settings.shared;
+	centerSettings.frustumTangents = unionTangents;
+	_centerView = CameraView(centerSettings);
+	
+	// Each eye is the shared viewpoint with its own displacement composed onto the head pose. Composing
+	// rather than replacing is what keeps the head pose in one place, shared by construction.
+	_isValid = _centerView.isValid();
+	for (size_t index = 0; index < _eyeCount; ++index) {
+		const EyeSettings &eye = settings.eyes[index];
+		CameraSettings eyeSettings = settings.shared;
+		eyeSettings.riderTransform = eye.eyeFromDevice * settings.shared.riderTransform;
+		eyeSettings.frustumTangents = eye.tangents;
+		if (eye.viewport) {
+			eyeSettings.viewport = *eye.viewport;
+		}
+		_eyes[index] = CameraView(eyeSettings);
+		_isValid = _isValid && _eyes[index].isValid();
+	}
+	
+	if (!_isValid) {
+		return;
+	}
+	
+	// Bound every eye by moving the apex back rather than opening the angles out. Widening cannot work: an
+	// eye displaced by d needs d/depth of extra tangent, which runs away without limit as the depth falls
+	// toward zero, so no fixed angle from the centre contains an offset eye everywhere. Retreating by
+	// p = d / smallestTangent does, exactly — the tangent an eye's boundary demands from the pulled-back
+	// apex is (T·depth + d)/(depth + p), which starts at d/p and rises to T, so it never exceeds T once
+	// p is that large. Better than widening at both ends: valid at every depth, and converging on the
+	// eyes' own angles far away instead of staying permanently splayed.
+	double maxEyeOffset = 0;
+	for (size_t index = 0; index < _eyeCount; ++index) {
+		const Double3 eyeInDeviceSpace = translation(detail::inverseViewTransformOf(settings.eyes[index].eyeFromDevice));
+		maxEyeOffset = std::max(maxEyeOffset, length(eyeInDeviceSpace));
+	}
+	
+	// The retreat is set by the tightest side, since that is the one the apex has to clear.
+	double smallestTangent = std::numeric_limits<double>::infinity();
+	for (const double tangent : {unionTangents.left, unionTangents.right, unionTangents.top, unionTangents.bottom}) {
+		if (tangent > 0) {
+			smallestTangent = std::min(smallestTangent, tangent);
+		}
+	}
+	
+	FrustumTangents bound = unionTangents;
+	double apexRetreat = 0;
+	if (maxEyeOffset > 0 && std::isfinite(smallestTangent)) {
+		apexRetreat = maxEyeOffset / smallestTangent;
+		// A side narrower than the retreat allows — which only an off-centre frustum with a negative tangent
+		// can be — opens out to meet it. Every other side keeps the angle the eyes actually asked for.
+		bound.left = std::max(bound.left, smallestTangent);
+		bound.right = std::max(bound.right, smallestTangent);
+		bound.top = std::max(bound.top, smallestTangent);
+		bound.bottom = std::max(bound.bottom, smallestTangent);
+	}
+	
+	const Double3 &rightAxis = _centerView.rightAxis();
+	const Double3 &upAxis = _centerView.upAxis();
+	const Double3 &forwardAxis = _centerView.forwardAxis();
+	const Double4x4 orientation(
+		Double4(rightAxis.x, rightAxis.y, rightAxis.z, 0),
+		Double4(upAxis.x, upAxis.y, upAxis.z, 0),
+		Double4(forwardAxis.x, forwardAxis.y, forwardAxis.z, 0),
+		Double4(0, 0, 0, 1));
+		
+	_combinedFrustum = Frustum3d::perspective(_centerView.eyePosition() - forwardAxis * apexRetreat, orientation,
+		std::atan(bound.left), std::atan(bound.right), std::atan(bound.top), std::atan(bound.bottom));
+}
 
 ///----------------------------------------
 /// @brief Verifies the camera's conventions, invertibility, culling volumes and projection edge cases.
@@ -1515,6 +1851,87 @@ inline void cameraSelfTest() {
 		check(!near(drifted->x, anchored->x, 1.0), "tangents without the matching eye offset let the window drift");
 	}
 	
+	// parallaxFraming produces the eye displacement and the shear together. Content at the anchor stays put,
+	// content beyond it separates out to the nudge, and the framing never zooms.
+	{
+		constexpr double anchorDepth = 10.0;
+		const FrustumTangents baseTangents{.left = 1.0, .right = 1.0, .top = 0.5, .bottom = 0.5};
+		
+		CameraSettings base = landscapeSettings();
+		base.farDepth = 1.0e9;
+		base.frustumTangents = baseTangents;
+		const CameraView still(base);
+		
+		CameraSettings nudged = base;
+		const ParallaxFraming framing = parallaxFraming(baseTangents, anchorDepth, Double2(0.1, 0));
+		framing.applyTo(nudged);
+		const CameraView shifted(nudged);
+		check(shifted.isValid(), "a nudged view is valid");
+		
+		// applyTo has to write both halves; either alone is a different, wrong effect.
+		check(approxEqual(nudged.riderTransform, framing.riderTransform, 1.0e-15), "applyTo writes the rider transform");
+		check(nudged.frustumTangents.has_value() && *nudged.frustumTangents == framing.tangents, "and the tangents");
+		
+		// Nothing at the anchor depth moves, wherever it sits in the frame.
+		for (const Double3 onAnchor : {Double3(0, 0, anchorDepth), Double3(6, 2, anchorDepth), Double3(-7, -3, anchorDepth)}) {
+			const auto before = still.screenPointForWorldPosition(onAnchor);
+			const auto after = shifted.screenPointForWorldPosition(onAnchor);
+			check(before.has_value() && after.has_value(), "a point on the anchor plane projects both ways");
+			check(near(before->x, after->x, 1.0e-9) && near(before->y, after->y, 1.0e-9), "content at the anchor depth does not move");
+		}
+		
+		// Beyond it the shift grows with depth and converges on the nudge measured in half-frames.
+		double previousShift = 0;
+		for (const double depth : {2 * anchorDepth, 20 * anchorDepth, 20000 * anchorDepth}) {
+			const auto before = still.screenPointForWorldPosition(Double3(0, 0, depth));
+			const auto after = shifted.screenPointForWorldPosition(Double3(0, 0, depth));
+			check(before.has_value() && after.has_value(), "a distant point projects both ways");
+			const double shift = after->x - before->x;
+			check(shift > previousShift, "the shift grows with depth");
+			previousShift = shift;
+		}
+		const double farLimit = 0.1 * 400;
+		check(previousShift < farLimit && previousShift > farLimit * 0.999, "and converges on the nudge in half-frames");
+		
+		// The framing shears, it does not zoom. The window's extent is preserved exactly; the angle it
+		// subtends drifts a little, because atan is not linear and the frustum has gone off centre.
+		const FrustumTangents &shiftedTangents = shifted.frustumTangents();
+		check(near(shiftedTangents.left + shiftedTangents.right, baseTangents.left + baseTangents.right, 1.0e-15), "the horizontal extent survives the nudge");
+		check(near(shiftedTangents.top + shiftedTangents.bottom, baseTangents.top + baseTangents.bottom, 1.0e-15), "and the vertical one");
+		check(std::abs(shifted.fieldOfViewRadians(CameraAxis::horizontal) - still.fieldOfViewRadians(CameraAxis::horizontal)) < 0.01, "the field of view barely moves with it");
+		
+		// Screen-oriented nudge: +x carries the far field right, +y carries it down.
+		const Double3 farAway(0, 0, 1.0e6);
+		CameraSettings down = base;
+		parallaxFraming(baseTangents, anchorDepth, Double2(0, 0.1)).applyTo(down);
+		const auto stillAt = still.screenPointForWorldPosition(farAway);
+		const auto rightAt = shifted.screenPointForWorldPosition(farAway);
+		const auto downAt = CameraView(down).screenPointForWorldPosition(farAway);
+		check(stillAt.has_value() && rightAt.has_value() && downAt.has_value(), "the far point projects every way");
+		check(rightAt->x > stillAt->x && near(rightAt->y, stillAt->y, 1.0e-9), "a rightward nudge carries the far field right");
+		check(downAt->y > stillAt->y && near(downAt->x, stillAt->x, 1.0e-9), "a downward nudge carries it down");
+		
+		// A zero anchor holds nothing still, so the image slides uniformly with no eye motion — which is the
+		// right answer for an all-sky view, and how the effect degrades when there is no finite depth to use.
+		CameraSettings unanchored = base;
+		const ParallaxFraming slide = parallaxFraming(baseTangents, 0.0, Double2(0.1, 0));
+		check(approxEqual(slide.eyeDisplacement, Double3(0, 0, 0), 1.0e-15), "a zero anchor leaves the eye where it was");
+		check(approxEqual(slide.riderTransform, Double4x4::identity(), 1.0e-15), "so the rider transform is identity");
+		slide.applyTo(unanchored);
+		const CameraView sliding(unanchored);
+		const auto nearSlide = sliding.screenPointForWorldPosition(Double3(0, 0, anchorDepth));
+		const auto farSlide = sliding.screenPointForWorldPosition(Double3(0, 0, 1.0e6));
+		const auto nearStill = still.screenPointForWorldPosition(Double3(0, 0, anchorDepth));
+		const auto farStill = still.screenPointForWorldPosition(Double3(0, 0, 1.0e6));
+		check(nearSlide.has_value() && farSlide.has_value() && nearStill.has_value() && farStill.has_value(), "all four project");
+		check(near(nearSlide->x - nearStill->x, farSlide->x - farStill->x, 1.0e-6), "an unanchored nudge moves every depth alike");
+		
+		// No nudge is no change at all.
+		const ParallaxFraming none = parallaxFraming(baseTangents, anchorDepth, Double2(0, 0));
+		check(approxEqual(none.riderTransform, Double4x4::identity(), 1.0e-15), "a zero nudge leaves the rider alone");
+		check(none.tangents == baseTangents, "and the framing alone");
+	}
+	
 	// Combinations that have no meaning are refused rather than reinterpreted.
 	{
 		CameraSettings settings = landscapeSettings();
@@ -1556,10 +1973,141 @@ inline void cameraSelfTest() {
 		settings.farDepth = settings.nearDepth;
 		check(!CameraView(settings).isValid(), "an empty depth range is invalid");
 		
+		// An infinite projection never reads the far plane, so it must not be able to invalidate one — or
+		// pushing the near plane past a stale default kills a camera for a field it was going to ignore.
+		settings.projection = Projection::infinitePerspective;
+		check(CameraView(settings).isValid(), "an infinite projection ignores an empty depth range");
+		settings.farDepth = 0.5 * settings.nearDepth;
+		const CameraView invertedFar(settings);
+		check(invertedFar.isValid(), "and an inverted one");
+		settings.farDepth = 1.0e9;
+		check(approxEqual(CameraView(settings).projectionTransform(), invertedFar.projectionTransform(), 1.0e-12),
+			"the far plane leaves an infinite projection untouched whatever it is");
+			
 		settings = landscapeSettings();
 		settings.projection = Projection::orthographic;
 		settings.orthographicHeight = 0;
 		check(!CameraView(settings).isValid(), "a zero orthographic height is invalid");
+	}
+	
+	// A stereo pair: two eyes displaced from one shared viewpoint, each looking through its own asymmetric
+	// optics, sharing everything else by construction.
+	{
+		constexpr double halfSeparation = 0.032;
+		const auto stereoSettings = [&](double nearDepth) {
+			StereoCameraSettings settings;
+			settings.shared.viewport = rect_double(0, 0, 800, 400);
+			settings.shared.position = Double3(3, -1, 7);
+			settings.shared.projection = Projection::infinitePerspective;
+			settings.shared.depthConvention = DepthConvention::reversedZeroToOne;
+			settings.shared.nearDepth = nearDepth;
+			// A head pose the eyes share. It has to be non-trivial or the composition that keeps it shared is
+			// indistinguishable from dropping it.
+			settings.shared.riderTransform = translationMatrix(Double3(0.1, 0.2, -0.05)) * yawPitchRollMatrix<double>(0.3, 0.1, 0.0);
+			// Each eye sits off centre and looks through optics that are asymmetric the other way, which is
+			// how a headset's two eyes actually differ.
+			settings.eyes[0].eyeFromDevice = translationMatrix(Double3(halfSeparation, 0, 0));
+			settings.eyes[0].tangents = FrustumTangents{.left = 1.0, .right = 0.8, .top = 0.9, .bottom = 0.9};
+			settings.eyes[1].eyeFromDevice = translationMatrix(Double3(-halfSeparation, 0, 0));
+			settings.eyes[1].tangents = FrustumTangents{.left = 0.8, .right = 1.0, .top = 0.9, .bottom = 0.9};
+			return settings;
+		};
+		
+		const StereoCameraView stereo(stereoSettings(0.5));
+		check(stereo.isValid() && stereo.eyeCount() == 2, "a two-eye stereo view is valid");
+		
+		// riderTransform maps platform space into eye space, so a +x translation there puts the eye at -x.
+		// What matters is that the eyes are separated by the full baseline and straddle the shared viewpoint.
+		const Double3 leftEye = stereo.eyeAt(0).eyePosition();
+		const Double3 rightEye = stereo.eyeAt(1).eyePosition();
+		check(near(length(leftEye - rightEye), 2 * halfSeparation, 1.0e-12), "the eyes are one baseline apart");
+		check(near(length(leftEye - stereo.centerView().eyePosition()), halfSeparation, 1.0e-12), "and each sits half a baseline from the centre");
+		check(approxEqual((leftEye + rightEye) * 0.5, stereo.centerView().eyePosition(), 1.0e-12), "which is midway between them");
+		
+		// The centre carries the shared head pose and only the per-eye displacement is missing from it.
+		const Double3 headOffset = translation(inverse(stereo.settings().shared.riderTransform));
+		check(approxEqual(stereo.centerView().eyePosition(), stereo.settings().shared.position + headOffset, 1.0e-12),
+			"the centre view carries the head pose but no eye displacement");
+		check(!approxEqual(stereo.centerView().eyePosition(), stereo.settings().shared.position, 1.0e-6), "which is not the platform's own position");
+		
+		// Each eye composes its offset onto that shared pose rather than replacing it, so the baseline turns
+		// with the head — the eyes stay level however the viewer looks around. Replacing instead of composing
+		// leaves the baseline stuck to the world axes while the head turns away from it.
+		check(near(std::abs(dot(normalize(rightEye - leftEye), stereo.centerView().rightAxis())), 1.0, 1.0e-12),
+			"the eye baseline follows the head's right axis");
+			
+		// The shared half really is shared — nothing per-eye can contradict it.
+		for (size_t index = 0; index < stereo.eyeCount(); ++index) {
+			check(stereo.eyeAt(index).settings().depthConvention == DepthConvention::reversedZeroToOne, "every eye inherits the depth convention");
+			check(near(stereo.eyeAt(index).settings().nearDepth, 0.5), "and the near plane");
+			check(stereo.eyeAt(index).settings().projection == Projection::infinitePerspective, "and the projection mode");
+		}
+		
+		// The eyes see different images — that is the point — but the centre sees at least as much as either.
+		const auto leftOf = stereo.eyeAt(0).screenPointForWorldPosition(Double3(3, -1, 27));
+		const auto rightOf = stereo.eyeAt(1).screenPointForWorldPosition(Double3(3, -1, 27));
+		check(leftOf.has_value() && rightOf.has_value(), "a point ahead projects in both eyes");
+		check(!near(leftOf->x, rightOf->x, 1.0e-6), "and lands in a different place in each");
+		check(stereo.centerView().fieldOfViewRadians(CameraAxis::horizontal) >= stereo.eyeAt(0).fieldOfViewRadians(CameraAxis::horizontal), "the centre spans at least as much as an eye");
+		check(near(stereo.centerView().frustumTangents().left, 1.0) && near(stereo.centerView().frustumTangents().right, 1.0), "the centre frustum unions the eyes side by side");
+		
+		// Nothing an eye can see may be culled by the combined bound — that is the only property it owes.
+		// The near plane is where the eye separation bites hardest, so sample from just past it.
+		for (size_t index = 0; index < stereo.eyeCount(); ++index) {
+			const CameraView &eye = stereo.eyeAt(index);
+			for (const Double2 screenPoint : {Double2(2, 2), Double2(798, 2), Double2(2, 398), Double2(798, 398), Double2(400, 200)}) {
+				for (const double distance : {0.51, 1.0, 50.0, 5000.0}) {
+					check(stereo.combinedFrustum().containsPoint(eye.rayThroughScreenPoint(screenPoint).pointAt(distance)),
+						"the combined frustum holds everything an eye can see");
+				}
+			}
+		}
+		
+		// The bound clears the eyes by retreating, not by splaying: its apex sits behind the shared viewpoint
+		// by the eye separation over the narrowest framing tangent, and its angles are the eyes' own. That is
+		// what makes it hold in front of the near plane, where a widened frustum cannot.
+		const double expectedRetreat = halfSeparation / 0.9;
+		const Double3 apexOffset = stereo.combinedFrustum().apex() - stereo.centerView().eyePosition();
+		check(near(length(apexOffset), expectedRetreat, 1.0e-12), "the combined apex retreats by the separation over the narrowest tangent");
+		check(dot(apexOffset, stereo.centerView().forwardAxis()) < 0, "backwards, behind the viewer");
+		check(near(stereo.combinedFrustum().planeOn(Frustum3d::Side::left).normal.x,
+			stereo.centerView().frustum().planeOn(Frustum3d::Side::left).normal.x, 1.0e-12), "and keeps the centre's angles");
+			
+		// It stays tight far away, where the apex retreat is negligible: something outside every eye's view
+		// is still culled rather than swept up by a bound that had opened out to be safe.
+		const Double3 wellOutside = stereo.centerView().eyePosition() + stereo.centerView().forwardAxis() * 5000.0
+		                          + stereo.centerView().rightAxis() * 12000.0;
+		check(!stereo.eyeAt(0).frustum().containsPoint(wellOutside) && !stereo.eyeAt(1).frustum().containsPoint(wellOutside), "the sample lies outside both eyes");
+		check(!stereo.combinedFrustum().containsPoint(wellOutside), "and outside the combined bound too");
+		
+		// The retreat depends on the eyes, not on the near plane — nothing about it changes when the depth
+		// range moves, which is what keeps the bound valid at every depth rather than beyond some threshold.
+		const StereoCameraView distant(stereoSettings(1000.0));
+		check(near(length(distant.combinedFrustum().apex() - distant.centerView().eyePosition()), expectedRetreat, 1.0e-12),
+			"and does not depend on the near plane");
+			
+		// A viewport set on an eye overrides the shared one; left unset, the eye inherits it.
+		StereoCameraSettings sideBySide = stereoSettings(0.5);
+		sideBySide.eyes[1].viewport = rect_double(800, 0, 1600, 400);
+		const StereoCameraView split(sideBySide);
+		check(near(split.eyeAt(0).settings().viewport._left, 0), "an eye without its own viewport inherits the shared one");
+		check(near(split.eyeAt(1).settings().viewport._left, 800), "and an eye with one uses it");
+		check(near(split.centerView().settings().viewport._left, 0), "the centre view keeps the shared viewport");
+		
+		// Degenerate counts leave nothing to render rather than reading past the end.
+		StereoCameraSettings noEyes = stereoSettings(0.5);
+		noEyes.eyeCount = 0;
+		check(!StereoCameraView(noEyes).isValid(), "a stereo view with no eyes is invalid");
+		StereoCameraSettings tooMany = stereoSettings(0.5);
+		tooMany.eyeCount = 99;
+		check(StereoCameraView(tooMany).eyeCount() == StereoCameraSettings::maxEyeCount, "an excessive eye count clamps");
+		
+		// One eye is the mono case, and it still resolves.
+		StereoCameraSettings monocular = stereoSettings(0.5);
+		monocular.eyeCount = 1;
+		const StereoCameraView single(monocular);
+		check(single.isValid() && single.eyeCount() == 1, "a single-eye stereo view is valid");
+		check(near(single.centerView().frustumTangents().right, 0.8), "and the centre frames that one eye alone");
 	}
 	
 	// The holder publishes whole edits and shares one derived view until the next change, so pointer
