@@ -138,11 +138,12 @@ enum class CameraAxis : uint8_t {
 ///          not coordinates, and the two are easy to confuse when both are four doubles.
 ///----------------------------------------
 
+template <class TFloat>
 struct EdgeInsets final {
-	double left{};
-	double top{};
-	double right{};
-	double bottom{};
+	TFloat left{};
+	TFloat top{};
+	TFloat right{};
+	TFloat bottom{};
 	
 	[[nodiscard]] bool operator==(const EdgeInsets &) const = default;
 	
@@ -165,11 +166,14 @@ struct EdgeInsets final {
 ///          have; a camera cannot use both.
 ///----------------------------------------
 
+template <class TFloat>
 struct FrustumTangents final {
-	double left{};
-	double right{};
-	double top{};
-	double bottom{};
+	using Vector3 = Vector<TFloat, 3>;
+	
+	TFloat left{};
+	TFloat right{};
+	TFloat top{};
+	TFloat bottom{};
 	
 	[[nodiscard]] bool operator==(const FrustumTangents &) const = default;
 	
@@ -180,18 +184,18 @@ struct FrustumTangents final {
 	}
 	
 	/// @brief The total horizontal field of view, in radians.
-	[[nodiscard]] double horizontalFieldOfViewRadians() const noexcept { return std::atan(left) + std::atan(right); }
+	[[nodiscard]] TFloat horizontalFieldOfViewRadians() const noexcept { return std::atan(left) + std::atan(right); }
 	
 	/// @brief The total vertical field of view, in radians.
-	[[nodiscard]] double verticalFieldOfViewRadians() const noexcept { return std::atan(top) + std::atan(bottom); }
+	[[nodiscard]] TFloat verticalFieldOfViewRadians() const noexcept { return std::atan(top) + std::atan(bottom); }
 	
 	///----------------------------------------
 	/// @brief A centred frustum spanning the given total fields of view, in radians.
 	///----------------------------------------
 	
-	[[nodiscard]] static FrustumTangents symmetric(double horizontalFieldOfViewRadians, double verticalFieldOfViewRadians) noexcept {
-		const double horizontal = std::tan(horizontalFieldOfViewRadians / 2);
-		const double vertical = std::tan(verticalFieldOfViewRadians / 2);
+	[[nodiscard]] static FrustumTangents symmetric(TFloat horizontalFieldOfViewRadians, TFloat verticalFieldOfViewRadians) noexcept {
+		const TFloat horizontal = std::tan(horizontalFieldOfViewRadians / 2);
+		const TFloat vertical = std::tan(verticalFieldOfViewRadians / 2);
 		return FrustumTangents{.left = horizontal, .right = horizontal, .top = vertical, .bottom = vertical};
 	}
 	
@@ -210,8 +214,8 @@ struct FrustumTangents final {
 	///   @param eyeOffset The eye's displacement in view space — @c +x right, @c +y up, @c +z forward.
 	///----------------------------------------
 	
-	[[nodiscard]] static FrustumTangents window(double halfWidth, double halfHeight, double distance, const Double3 &eyeOffset) noexcept {
-		const double windowDepth = distance - eyeOffset.z;
+	[[nodiscard]] static FrustumTangents window(TFloat halfWidth, TFloat halfHeight, TFloat distance, const Vector3 &eyeOffset) noexcept {
+		const TFloat windowDepth = distance - eyeOffset.z;
 		return FrustumTangents{
 			.left = (halfWidth + eyeOffset.x) / windowDepth,
 			.right = (halfWidth - eyeOffset.x) / windowDepth,
@@ -294,10 +298,10 @@ struct CameraSettings final {
 	///          Invalid together with @ref Projection::orthographic.
 	///----------------------------------------
 	
-	std::optional<FrustumTangents> frustumTangents;
+	std::optional<FrustumTangents<double>> frustumTangents;
 	
 	/// @brief Edges of the viewport covered by other content, in pixels. Narrows @ref CameraView::unobstructedFrustum only.
-	EdgeInsets obstructionMargins{};
+	EdgeInsets<double> obstructionMargins{};
 	
 	/// @brief Mirrors the image left-to-right.
 	bool mirrorHorizontally = false;
@@ -346,7 +350,7 @@ struct ParallaxFraming final {
 	Double4x4 riderTransform = Double4x4::identity();
 	
 	/// @brief For @ref Math::CameraSettings::frustumTangents.
-	FrustumTangents tangents;
+	FrustumTangents<double> tangents;
 	
 	/// @brief How far the eye moved, in view space and world units. Exposed for inspection; applying
 	///        @ref riderTransform already accounts for it.
@@ -388,7 +392,7 @@ struct ParallaxFraming final {
 ///          same extent — visible in @ref CameraView::fieldOfViewRadians, not in the image.
 ///----------------------------------------
 
-[[nodiscard]] inline ParallaxFraming parallaxFraming(const FrustumTangents &baseTangents, double anchorDepth, const Double2 &nudge) noexcept {
+[[nodiscard]] inline ParallaxFraming parallaxFraming(const FrustumTangents<double> &baseTangents, double anchorDepth, const Double2 &nudge) noexcept {
 	// The window's half-extent at unit depth. Multiplying by the anchor depth gives the real window, but the
 	// shear below needs only the ratio, which is why the anchor cancels out of the tangents.
 	const double halfHorizontalSpan = (baseTangents.left + baseTangents.right) / 2;
@@ -406,7 +410,7 @@ struct ParallaxFraming final {
 	
 	// Each side gives up exactly what the opposite side gains, so the total span — and with it the field of
 	// view — comes through unchanged.
-	framing.tangents = FrustumTangents{
+	framing.tangents = FrustumTangents<double>{
 		.left = baseTangents.left + nudge.x * halfHorizontalSpan,
 		.right = baseTangents.right - nudge.x * halfHorizontalSpan,
 		.top = baseTangents.top + nudge.y * halfVerticalSpan,
@@ -555,7 +559,7 @@ public:
 	///   @return The tangents, or an invalid @ref Math::FrustumTangents under @ref Projection::orthographic.
 	///----------------------------------------
 	
-	[[nodiscard]] const FrustumTangents &frustumTangents() const noexcept { return _resolvedTangents; }
+	[[nodiscard]] const FrustumTangents<double> &frustumTangents() const noexcept { return _resolvedTangents; }
 	
 	///@}
 	///----------------------------------------
@@ -667,7 +671,7 @@ private:
 	Frustum64 _frustum;
 	Frustum64 _unobstructedFrustum;
 	std::optional<OrthographicVolume> _orthographicVolume;
-	FrustumTangents _resolvedTangents;
+	FrustumTangents<double> _resolvedTangents;
 	
 	double _aspectRatio = 1;
 	double _horizontalFieldOfViewRadians = 0;
@@ -809,7 +813,7 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 		// An explicit frustum already says exactly what is visible, so there is nothing left for the clip
 		// rectangle or the viewport offset to contribute — they are another way of writing the same four
 		// numbers, and applying them on top would shift a frustum the caller had already placed.
-		const FrustumTangents &tangents = *_settings.frustumTangents;
+		const auto &tangents = *_settings.frustumTangents;
 		extentLeft = -tangents.left * _settings.nearDepth;
 		extentRight = tangents.right * _settings.nearDepth;
 		extentTop = tangents.top * _settings.nearDepth;
@@ -916,7 +920,7 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	// Report the field of view the resolved frustum actually spans, not the one that was asked for. The two
 	// differ whenever a clip rectangle, a viewport offset or an explicit frustum is in play, and it is the
 	// resolved one that label sizing and level-of-detail thresholds want.
-	_resolvedTangents = FrustumTangents{
+	_resolvedTangents = FrustumTangents<double>{
 		.left = -visibleLeft / _settings.nearDepth,
 		.right = visibleRight / _settings.nearDepth,
 		.top = visibleTop / _settings.nearDepth,
@@ -943,7 +947,7 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	
 	// The margins are given in pixels; the visible rectangle is in near-plane units. One scale factor
 	// converts, and it stays correct however far off centre the rectangle sits.
-	const EdgeInsets &margins = _settings.obstructionMargins;
+	const auto &margins = _settings.obstructionMargins;
 	if (margins.isEmpty()) {
 		_unobstructedFrustum = _frustum;
 		return;
@@ -1205,7 +1209,7 @@ struct EyeSettings final {
 	
 	/// @brief This eye's frustum. Independent per eye, because a headset's two eyes look through different
 	///        parts of their optics and neither frustum is centred.
-	FrustumTangents tangents;
+	FrustumTangents<double> tangents;
 	
 	/// @brief This eye's pixels, when they differ from @c shared.viewport — a side-by-side layout puts the
 	///        two eyes in different regions of one texture. Left unset when both eyes fill the same bounds.
@@ -1350,9 +1354,9 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 	// The centre is framed by the union of the eyes, so it sees everything any of them can. Each side takes
 	// the most generous eye independently — the eyes are asymmetric in opposite directions, so taking one
 	// eye's frustum whole would clip the other.
-	FrustumTangents unionTangents = settings.eyes[0].tangents;
+	auto unionTangents = settings.eyes[0].tangents;
 	for (size_t index = 1; index < _eyeCount; ++index) {
-		const FrustumTangents &tangents = settings.eyes[index].tangents;
+		const auto& tangents = settings.eyes[index].tangents;
 		unionTangents.left = std::max(unionTangents.left, tangents.left);
 		unionTangents.right = std::max(unionTangents.right, tangents.right);
 		unionTangents.top = std::max(unionTangents.top, tangents.top);
@@ -1403,7 +1407,7 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 		}
 	}
 	
-	FrustumTangents bound = unionTangents;
+	auto bound = unionTangents;
 	double apexRetreat = 0;
 	if (maxEyeOffset > 0 && std::isfinite(smallestTangent)) {
 		apexRetreat = maxEyeOffset / smallestTangent;
@@ -1581,7 +1585,7 @@ inline void cameraSelfTest() {
 	{
 		CameraSettings settings = landscapeSettings();
 		const CameraView unmargined(settings);
-		settings.obstructionMargins = EdgeInsets{.left = 0, .top = 100, .right = 0, .bottom = 0};
+		settings.obstructionMargins = EdgeInsets<double>{.left = 0, .top = 100, .right = 0, .bottom = 0};
 		const CameraView view(settings);
 		check(approxEqual(view.projectionTransform(), unmargined.projectionTransform(), 1.0e-12), "margins do not change the projection");
 		check(view.unobstructedFrustum().isValid(), "a partial margin leaves a usable frustum");
@@ -1593,7 +1597,7 @@ inline void cameraSelfTest() {
 		check(view.unobstructedFrustum().containsPoint(belowMargin), "a point below the margin is unobstructed");
 		check(!view.unobstructedFrustum().containsPoint(withinMargin), "a point behind the margin is obstructed");
 		
-		settings.obstructionMargins = EdgeInsets{.left = 500, .top = 0, .right = 500, .bottom = 0};
+		settings.obstructionMargins = EdgeInsets<double>{.left = 500, .top = 0, .right = 500, .bottom = 0};
 		check(!CameraView(settings).unobstructedFrustum().isValid(), "margins that meet leave no unobstructed frustum");
 	}
 	
@@ -1779,7 +1783,7 @@ inline void cameraSelfTest() {
 	// through the middle of the image.
 	{
 		CameraSettings settings = landscapeSettings();
-		settings.frustumTangents = FrustumTangents{.left = 1.0, .right = 0.7, .top = 0.8, .bottom = 0.95};
+		settings.frustumTangents = FrustumTangents<double>{.left = 1.0, .right = 0.7, .top = 0.8, .bottom = 0.95};
 		settings.narrowAxisFieldOfViewRadians = 10 * deg2rad;
 		const CameraView view(settings);
 		
@@ -1811,7 +1815,7 @@ inline void cameraSelfTest() {
 		// The tangents hold the window still; the eye displacement supplies the parallax. Both, or neither.
 		const auto viewFromEye = [&](const Double3 &eyeOffset, bool moveTheEye) {
 			CameraSettings settings = base;
-			settings.frustumTangents = FrustumTangents::window(halfWidth, halfHeight, windowDistance, eyeOffset);
+			settings.frustumTangents = FrustumTangents<double>::window(halfWidth, halfHeight, windowDistance, eyeOffset);
 			if (moveTheEye) {
 				settings.position = eyeOffset;
 			}
@@ -1855,7 +1859,7 @@ inline void cameraSelfTest() {
 	// content beyond it separates out to the nudge, and the framing never zooms.
 	{
 		constexpr double anchorDepth = 10.0;
-		const FrustumTangents baseTangents{.left = 1.0, .right = 1.0, .top = 0.5, .bottom = 0.5};
+		const FrustumTangents<double> baseTangents{.left = 1.0, .right = 1.0, .top = 0.5, .bottom = 0.5};
 		
 		CameraSettings base = landscapeSettings();
 		base.farDepth = 1.0e9;
@@ -1895,7 +1899,7 @@ inline void cameraSelfTest() {
 		
 		// The framing shears, it does not zoom. The window's extent is preserved exactly; the angle it
 		// subtends drifts a little, because atan is not linear and the frustum has gone off centre.
-		const FrustumTangents &shiftedTangents = shifted.frustumTangents();
+		const FrustumTangents<double> &shiftedTangents = shifted.frustumTangents();
 		check(near(shiftedTangents.left + shiftedTangents.right, baseTangents.left + baseTangents.right, 1.0e-15), "the horizontal extent survives the nudge");
 		check(near(shiftedTangents.top + shiftedTangents.bottom, baseTangents.top + baseTangents.bottom, 1.0e-15), "and the vertical one");
 		check(std::abs(shifted.fieldOfViewRadians(CameraAxis::horizontal) - still.fieldOfViewRadians(CameraAxis::horizontal)) < 0.01, "the field of view barely moves with it");
@@ -1935,17 +1939,17 @@ inline void cameraSelfTest() {
 	// Combinations that have no meaning are refused rather than reinterpreted.
 	{
 		CameraSettings settings = landscapeSettings();
-		settings.frustumTangents = FrustumTangents::symmetric(60 * deg2rad, 40 * deg2rad);
+		settings.frustumTangents = FrustumTangents<double>::symmetric(60 * deg2rad, 40 * deg2rad);
 		check(CameraView(settings).isValid(), "a symmetric explicit frustum is valid");
 		
 		settings.projection = Projection::orthographic;
 		check(!CameraView(settings).isValid(), "tangents and a parallel projection are refused");
 		
 		settings.projection = Projection::perspective;
-		settings.frustumTangents = FrustumTangents{.left = -1.0, .right = 0.5, .top = 0.5, .bottom = 0.5};
+		settings.frustumTangents = FrustumTangents<double>{.left = -1.0, .right = 0.5, .top = 0.5, .bottom = 0.5};
 		check(!CameraView(settings).isValid(), "a frustum with no horizontal extent is refused");
 		
-		settings.frustumTangents = FrustumTangents{.left = 0.5, .right = 0.5, .top = 0.5, .bottom = -0.6};
+		settings.frustumTangents = FrustumTangents<double>{.left = 0.5, .right = 0.5, .top = 0.5, .bottom = -0.6};
 		check(!CameraView(settings).isValid(), "a frustum with no vertical extent is refused");
 	}
 	
@@ -2007,9 +2011,9 @@ inline void cameraSelfTest() {
 			// Each eye sits off centre and looks through optics that are asymmetric the other way, which is
 			// how a headset's two eyes actually differ.
 			settings.eyes[0].eyeFromDevice = translationMatrix(Double3(halfSeparation, 0, 0));
-			settings.eyes[0].tangents = FrustumTangents{.left = 1.0, .right = 0.8, .top = 0.9, .bottom = 0.9};
+			settings.eyes[0].tangents = FrustumTangents<double>{.left = 1.0, .right = 0.8, .top = 0.9, .bottom = 0.9};
 			settings.eyes[1].eyeFromDevice = translationMatrix(Double3(-halfSeparation, 0, 0));
-			settings.eyes[1].tangents = FrustumTangents{.left = 0.8, .right = 1.0, .top = 0.9, .bottom = 0.9};
+			settings.eyes[1].tangents = FrustumTangents<double>{.left = 0.8, .right = 1.0, .top = 0.9, .bottom = 0.9};
 			return settings;
 		};
 		
