@@ -340,8 +340,8 @@ private:
 	TFloat _halfAngle = std::numeric_limits<TFloat>::quiet_NaN();
 };
 
-using Frustum3d = Frustum<double>;
-using Frustum3f = Frustum<float>;
+using Frustum64 = Frustum<double>;
+using Frustum32 = Frustum<float>;
 
 ///----------------------------------------
 /// @brief Validates frustum construction, the point and volume queries, and transformation.
@@ -356,10 +356,10 @@ inline void frustumSelfTest() {
 	// A 90° symmetric frustum looking down +z from the origin
 	auto identity = Double4x4::identity();
 	auto quarterTurn = std::numbers::pi / 2;
-	auto viewer = Frustum3d::perspective(Double3(0, 0, 0), identity, quarterTurn, quarterTurn);
+	auto viewer = Frustum64::perspective(Double3(0, 0, 0), identity, quarterTurn, quarterTurn);
 	
 	check(viewer.isValid(), "a constructed frustum is valid");
-	check(!Frustum3d().isValid(), "a default frustum is not");
+	check(!Frustum64().isValid(), "a default frustum is not");
 	check(approxEqual(viewer.direction().z, 1.0), "the forward direction is the view axis");
 	
 	// Straight ahead is inside; behind and beyond the 45° edges is not
@@ -385,12 +385,12 @@ inline void frustumSelfTest() {
 	check(viewer.intersectsSphere(Double3(0, 0, -1), 5.0), "one behind but large enough to reach is");
 	
 	// Box containment separates wholly-inside from straddling, which is what a tree traversal needs
-	check(viewer.containmentOfBox(Double3(-1, -1, 10), Double3(1, 1, 12)) == Frustum3d::Containment::inside, "a box well inside is inside");
-	check(viewer.containmentOfBox(Double3(-1, -1, -12), Double3(1, 1, -10)) == Frustum3d::Containment::outside, "a box behind is outside");
-	check(viewer.containmentOfBox(Double3(-100, -1, 10), Double3(100, 1, 12)) == Frustum3d::Containment::intersecting, "a box crossing the edges straddles");
+	check(viewer.containmentOfBox(Double3(-1, -1, 10), Double3(1, 1, 12)) == Frustum64::Containment::inside, "a box well inside is inside");
+	check(viewer.containmentOfBox(Double3(-1, -1, -12), Double3(1, 1, -10)) == Frustum64::Containment::outside, "a box behind is outside");
+	check(viewer.containmentOfBox(Double3(-100, -1, 10), Double3(100, 1, 12)) == Frustum64::Containment::intersecting, "a box crossing the edges straddles");
 	
 	// The cone form bounds the requested angle: inside it is inside, and the bound is conservative
-	auto cone = Frustum3d::cone(Double3(0, 0, 0), Double3(0, 0, 1), 0.1);
+	auto cone = Frustum64::cone(Double3(0, 0, 0), Double3(0, 0, 1), 0.1);
 	check(cone.isValid(), "a cone frustum is valid");
 	check(approxEqual(cone.halfAngle(), 0.1), "and reports the angle it was built with");
 	check(std::isnan(viewer.halfAngle()), "a perspective frustum reports no single half-angle");
@@ -407,7 +407,7 @@ inline void frustumSelfTest() {
 	check(approxEqual(moved.direction().z, 1.0), "a pure translation leaves the direction alone");
 	
 	// A float instantiation compiles and agrees
-	auto viewerf = Frustum3f::perspective(Float3(0, 0, 0), Float4x4::identity(), float(quarterTurn), float(quarterTurn));
+	auto viewerf = Frustum32::perspective(Float3(0, 0, 0), Float4x4::identity(), float(quarterTurn), float(quarterTurn));
 	check(viewerf.containsPoint(Float3(0, 0, 10)), "the float instantiation matches");
 }
 
