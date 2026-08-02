@@ -520,7 +520,7 @@ public:
 	///          @ref Math::Frustum::isValid before relying on this.
 	///----------------------------------------
 	
-	[[nodiscard]] const Frustum3d &frustum() const noexcept { return _frustum; }
+	[[nodiscard]] const Frustum64 &frustum() const noexcept { return _frustum; }
 	
 	///----------------------------------------
 	///   @brief The world-space viewing volume with @c obstructionMargins removed.
@@ -529,7 +529,7 @@ public:
 	///          projection.
 	///----------------------------------------
 	
-	[[nodiscard]] const Frustum3d &unobstructedFrustum() const noexcept { return _unobstructedFrustum; }
+	[[nodiscard]] const Frustum64 &unobstructedFrustum() const noexcept { return _unobstructedFrustum; }
 	
 	///----------------------------------------
 	/// @brief The view-space box an orthographic projection maps to clip space, or @c nullopt in the
@@ -664,8 +664,8 @@ private:
 	Double3 _upAxis{0, 1, 0};
 	Double3 _forwardAxis{0, 0, 1};
 	
-	Frustum3d _frustum;
-	Frustum3d _unobstructedFrustum;
+	Frustum64 _frustum;
+	Frustum64 _unobstructedFrustum;
 	std::optional<OrthographicVolume> _orthographicVolume;
 	FrustumTangents _resolvedTangents;
 	
@@ -934,7 +934,7 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	// Half-angles are signed, measured from the forward axis outward. An off-centre clip rectangle can put
 	// both edges of the image on the same side of the axis, and a negative half-angle expresses that.
 	const auto perspectiveFrustum = [&](double left, double top, double right, double bottom) {
-		return Frustum3d::perspective(_eyePosition, frustumOrientation,
+		return Frustum64::perspective(_eyePosition, frustumOrientation,
 			std::atan2(-left, _settings.nearDepth), std::atan2(right, _settings.nearDepth),
 			std::atan2(top, _settings.nearDepth), std::atan2(-bottom, _settings.nearDepth));
 	};
@@ -1328,13 +1328,13 @@ public:
 	///          eyes coincide and this bound's retreat is pure waste.
 	///----------------------------------------
 	
-	[[nodiscard]] const Frustum3d &combinedFrustum() const noexcept { return _combinedFrustum; }
+	[[nodiscard]] const Frustum64 &combinedFrustum() const noexcept { return _combinedFrustum; }
 	
 private:
 	StereoCameraSettings _settings;
 	std::array<CameraView, StereoCameraSettings::maxEyeCount> _eyes;
 	CameraView _centerView;
-	Frustum3d _combinedFrustum;
+	Frustum64 _combinedFrustum;
 	size_t _eyeCount = 0;
 	bool _isValid = false;
 };
@@ -1424,7 +1424,7 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 		Double4(forwardAxis.x, forwardAxis.y, forwardAxis.z, 0),
 		Double4(0, 0, 0, 1));
 		
-	_combinedFrustum = Frustum3d::perspective(_centerView.eyePosition() - forwardAxis * apexRetreat, orientation,
+	_combinedFrustum = Frustum64::perspective(_centerView.eyePosition() - forwardAxis * apexRetreat, orientation,
 		std::atan(bound.left), std::atan(bound.right), std::atan(bound.top), std::atan(bound.bottom));
 }
 
@@ -2070,8 +2070,8 @@ inline void cameraSelfTest() {
 		const Double3 apexOffset = stereo.combinedFrustum().apex() - stereo.centerView().eyePosition();
 		check(near(length(apexOffset), expectedRetreat, 1.0e-12), "the combined apex retreats by the separation over the narrowest tangent");
 		check(dot(apexOffset, stereo.centerView().forwardAxis()) < 0, "backwards, behind the viewer");
-		check(near(stereo.combinedFrustum().planeOn(Frustum3d::Side::left).normal.x,
-			stereo.centerView().frustum().planeOn(Frustum3d::Side::left).normal.x, 1.0e-12), "and keeps the centre's angles");
+		check(near(stereo.combinedFrustum().planeOn(Frustum64::Side::left).normal.x,
+			stereo.centerView().frustum().planeOn(Frustum64::Side::left).normal.x, 1.0e-12), "and keeps the centre's angles");
 			
 		// It stays tight far away, where the apex retreat is negligible: something outside every eye's view
 		// is still culled rather than swept up by a bound that had opened out to be safe.
