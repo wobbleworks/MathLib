@@ -27,6 +27,13 @@
 ///             y grows downward — so the viewport, the clip bounds and the viewport offset all read
 ///             the same way. The flip to NDC happens once, inside @ref Math::CameraView.
 ///
+///             Every type here is templated on its scalar, with @c 64 and @c 32 aliases for the two
+///             instantiations — @ref Math::Camera64 and @ref Math::Camera32. Double precision is the
+///             right default and what the aliases without a suffix would mean: a world measured in
+///             astronomical units still has to resolve arcseconds, and single precision runs out of
+///             mantissa long before that. Single exists for the cases that are bounded in extent and
+///             cost-sensitive, and its self-test coverage says what it can be trusted to do.
+///
 ///             @c position and @c orientation place a *platform* — the vantage point the application
 ///             drives, which is where the viewer logically is. @c riderTransform then carries the eye
 ///             away from that platform: a head pose from a headset, or a motion-driven parallax nudge on
@@ -100,7 +107,8 @@ enum class DepthConvention : uint8_t {
 /// @brief The normalized device depth of the near plane under a convention.
 ///----------------------------------------
 
-[[nodiscard]] constexpr double nearPlaneDepth(DepthConvention convention) noexcept {
+template <class TFloat = double>
+[[nodiscard]] constexpr TFloat nearPlaneDepth(DepthConvention convention) noexcept {
 	switch (convention) {
 		case DepthConvention::negativeOneToOne:  return -1;
 		case DepthConvention::zeroToOne:         return 0;
@@ -115,8 +123,9 @@ enum class DepthConvention : uint8_t {
 ///          without reaching.
 ///----------------------------------------
 
-[[nodiscard]] constexpr double farPlaneDepth(DepthConvention convention) noexcept {
-	return convention == DepthConvention::reversedZeroToOne ? 0.0 : 1.0;
+template <class TFloat = double>
+[[nodiscard]] constexpr TFloat farPlaneDepth(DepthConvention convention) noexcept {
+	return convention == DepthConvention::reversedZeroToOne ? TFloat(0) : TFloat(1);
 }
 
 ///----------------------------------------
@@ -232,17 +241,25 @@ struct FrustumTangents final {
 ///          copying one, adjusting a field and handing it back to @ref Math::Camera::setSettings.
 ///----------------------------------------
 
+template <class TFloat>
 struct CameraSettings final {
+	using Scalar = TFloat;
+	using Vector2 = Vector<TFloat, 2>;
+	using Vector3 = Vector<TFloat, 3>;
+	using Vector4 = Vector<TFloat, 4>;
+	using Matrix4 = Matrix<TFloat, 4>;
+	using Rect = rect<TFloat>;
+	
 	///----------------------------------------
 	/// @name Placement
 	///----------------------------------------
 	///@{
 	
 	/// @brief The platform's position, in world coordinates — where the viewer logically is.
-	Double3 position{0, 0, 0};
+	Vector3 position{0, 0, 0};
 	
 	/// @brief The platform's orientation; its local x, y and z axes are the view's right, up and forward.
-	Quaternion64 orientation{};
+	Math::Quaternion<TFloat> orientation{};
 	
 	///----------------------------------------
 	///   @brief The eye's displacement from the platform: a rigid transform mapping platform space into eye
@@ -264,7 +281,7 @@ struct CameraSettings final {
 	///          length.
 	///----------------------------------------
 	
-	Double4x4 riderTransform = Double4x4::identity();
+	Matrix4 riderTransform = Matrix4::identity();
 	
 	///@}
 	///----------------------------------------
@@ -273,17 +290,17 @@ struct CameraSettings final {
 	///@{
 	
 	/// @brief The field of view along the shorter viewport edge, in radians. The longer edge follows from the aspect ratio.
-	double narrowAxisFieldOfViewRadians = defaultFieldOfViewRadians;
+	TFloat narrowAxisFieldOfViewRadians = defaultFieldOfViewRadians;
 	
 	/// @brief The viewport, in pixels, with y growing downward — @c _top is above @c _bottom.
-	rect_double viewport{0, 0, 1, 1};
+	Rect viewport{0, 0, 1, 1};
 	
 	/// @brief The visible sub-rectangle of the full view, normalized to @c [-1,1] and oriented like the
 	///        viewport: @c {-1,-1,1,1} is the whole view, @c _top is the upper edge.
-	rect_double clipBounds{-1, -1, 1, 1};
+	Rect clipBounds{-1, -1, 1, 1};
 	
 	/// @brief Shifts the image within the viewport, in half-viewports: @c +x moves it right, @c +y moves it down.
-	Double2 viewportOffset{0, 0};
+	Vector2 viewportOffset{0, 0};
 	
 	///----------------------------------------
 	///   @brief An explicit frustum, superseding @c narrowAxisFieldOfViewRadians, @c clipBounds and
@@ -298,10 +315,10 @@ struct CameraSettings final {
 	///          Invalid together with @ref Projection::orthographic.
 	///----------------------------------------
 	
-	std::optional<FrustumTangents<double>> frustumTangents;
+	std::optional<FrustumTangents<TFloat>> frustumTangents;
 	
 	/// @brief Edges of the viewport covered by other content, in pixels. Narrows @ref CameraView::unobstructedFrustum only.
-	EdgeInsets<double> obstructionMargins{};
+	EdgeInsets<TFloat> obstructionMargins{};
 	
 	/// @brief Mirrors the image left-to-right.
 	bool mirrorHorizontally = false;
@@ -322,15 +339,15 @@ struct CameraSettings final {
 	DepthConvention depthConvention = DepthConvention::negativeOneToOne;
 	
 	/// @brief Distance to the near plane. Must be positive under a perspective projection.
-	double nearDepth = 1;
+	TFloat nearDepth = 1;
 	
 	/// @brief Distance to the far plane. Ignored under @ref Projection::infinitePerspective.
-	double farDepth = 1000;
+	TFloat farDepth = 1000;
 	
 	/// @brief The world-space height the view spans under @ref Projection::orthographic; the width follows
 	///        from the aspect ratio. Ignored by the perspective projections, which take their scale from the
 	///        field of view instead.
-	double orthographicHeight = 1;
+	TFloat orthographicHeight = 1;
 	
 	///@}
 	
@@ -345,19 +362,27 @@ struct CameraSettings final {
 ///          together. Apply both — @ref applyTo does it in one step.
 ///----------------------------------------
 
+template <class TFloat>
 struct ParallaxFraming final {
+	using Scalar = TFloat;
+	using Vector2 = Vector<TFloat, 2>;
+	using Vector3 = Vector<TFloat, 3>;
+	using Vector4 = Vector<TFloat, 4>;
+	using Matrix4 = Matrix<TFloat, 4>;
+	using Rect = rect<TFloat>;
+	
 	/// @brief For @ref Math::CameraSettings::riderTransform.
-	Double4x4 riderTransform = Double4x4::identity();
+	Matrix4 riderTransform = Matrix4::identity();
 	
 	/// @brief For @ref Math::CameraSettings::frustumTangents.
-	FrustumTangents<double> tangents;
+	FrustumTangents<TFloat> tangents;
 	
 	/// @brief How far the eye moved, in view space and world units. Exposed for inspection; applying
 	///        @ref riderTransform already accounts for it.
-	Double3 eyeDisplacement{0, 0, 0};
+	Vector3 eyeDisplacement{0, 0, 0};
 	
 	/// @brief Writes both settings at once, so neither can be applied without the other.
-	void applyTo(CameraSettings &settings) const noexcept {
+	void applyTo(CameraSettings<TFloat> &settings) const noexcept {
 		settings.riderTransform = riderTransform;
 		settings.frustumTangents = tangents;
 	}
@@ -392,17 +417,18 @@ struct ParallaxFraming final {
 ///          same extent — visible in @ref CameraView::fieldOfViewRadians, not in the image.
 ///----------------------------------------
 
-[[nodiscard]] inline ParallaxFraming parallaxFraming(const FrustumTangents<double> &baseTangents, double anchorDepth, const Double2 &nudge) noexcept {
+template <class TFloat>
+[[nodiscard]] ParallaxFraming<TFloat> parallaxFraming(const FrustumTangents<TFloat> &baseTangents, TFloat anchorDepth, const Vector<TFloat, 2> &nudge) noexcept {
 	// The window's half-extent at unit depth. Multiplying by the anchor depth gives the real window, but the
 	// shear below needs only the ratio, which is why the anchor cancels out of the tangents.
-	const double halfHorizontalSpan = (baseTangents.left + baseTangents.right) / 2;
-	const double halfVerticalSpan = (baseTangents.top + baseTangents.bottom) / 2;
-	const double depth = std::max(anchorDepth, 0.0);
+	const TFloat halfHorizontalSpan = (baseTangents.left + baseTangents.right) / 2;
+	const TFloat halfVerticalSpan = (baseTangents.top + baseTangents.bottom) / 2;
+	const TFloat depth = std::max(anchorDepth, TFloat(0));
 	
 	// The nudge is screen-oriented and view space is y-up, so the vertical displacement is negated once here.
-	const Double3 displacement(nudge.x * halfHorizontalSpan * depth, -nudge.y * halfVerticalSpan * depth, 0);
+	const Vector<TFloat, 3> displacement(nudge.x * halfHorizontalSpan * depth, -nudge.y * halfVerticalSpan * depth, 0);
 	
-	ParallaxFraming framing;
+	ParallaxFraming<TFloat> framing;
 	framing.eyeDisplacement = displacement;
 	
 	// riderTransform maps platform space into eye space, so moving the eye by +d shifts that space by -d.
@@ -410,7 +436,7 @@ struct ParallaxFraming final {
 	
 	// Each side gives up exactly what the opposite side gains, so the total span — and with it the field of
 	// view — comes through unchanged.
-	framing.tangents = FrustumTangents<double>{
+	framing.tangents = FrustumTangents<TFloat>{
 		.left = baseTangents.left + nudge.x * halfHorizontalSpan,
 		.right = baseTangents.right - nudge.x * halfHorizontalSpan,
 		.top = baseTangents.top + nudge.y * halfVerticalSpan,
@@ -426,26 +452,34 @@ struct ParallaxFraming final {
 ///          frusta — so build one per settings change, not per query.
 ///----------------------------------------
 
+template <class TFloat>
 class CameraView final {
 ///----------------------------------------
 public:
+	using Scalar = TFloat;
+	using Vector2 = Vector<TFloat, 2>;
+	using Vector3 = Vector<TFloat, 3>;
+	using Vector4 = Vector<TFloat, 4>;
+	using Matrix4 = Matrix<TFloat, 4>;
+	using Rect = rect<TFloat>;
+	
 	///----------------------------------------
 	/// @brief Derives the view from @p settings.
 	///----------------------------------------
 	
-	explicit CameraView(const CameraSettings &settings) noexcept;
+	explicit CameraView(const CameraSettings<TFloat> &settings) noexcept;
 	
 	///----------------------------------------
 	/// @brief The view of default settings — so the type can be stored in an array and filled in later.
 	///----------------------------------------
 	
-	CameraView() noexcept : CameraView(CameraSettings{}) {}
+	CameraView() noexcept : CameraView(CameraSettings<TFloat>{}) {}
 	
 	///----------------------------------------
 	/// @brief The settings this view was derived from.
 	///----------------------------------------
 	
-	[[nodiscard]] const CameraSettings &settings() const noexcept { return _settings; }
+	[[nodiscard]] const CameraSettings<TFloat> &settings() const noexcept { return _settings; }
 	
 	///----------------------------------------
 	///   @brief Whether the view is usable.
@@ -462,32 +496,32 @@ public:
 	///@{
 	
 	/// @brief World→view, including @c riderTransform — the transform to render the eye's image with.
-	[[nodiscard]] const Double4x4 &viewTransform() const noexcept { return _viewTransform; }
+	[[nodiscard]] const Matrix4 &viewTransform() const noexcept { return _viewTransform; }
 	
 	/// @brief View→world.
-	[[nodiscard]] const Double4x4 &inverseViewTransform() const noexcept { return _inverseViewTransform; }
+	[[nodiscard]] const Matrix4 &inverseViewTransform() const noexcept { return _inverseViewTransform; }
 	
 	/// @brief World→platform, without @c riderTransform — the vantage point the application placed, which
 	///        is the one astronomy and other logical queries should use rather than the eye's.
-	[[nodiscard]] const Double4x4 &unadjustedViewTransform() const noexcept { return _unadjustedViewTransform; }
+	[[nodiscard]] const Matrix4 &unadjustedViewTransform() const noexcept { return _unadjustedViewTransform; }
 	
 	/// @brief View→normalized device coordinates, including mirroring and the viewport offset.
-	[[nodiscard]] const Double4x4 &projectionTransform() const noexcept { return _projectionTransform; }
+	[[nodiscard]] const Matrix4 &projectionTransform() const noexcept { return _projectionTransform; }
 	
 	/// @brief Normalized device coordinates→view. A true inverse of @ref projectionTransform in every projection mode.
-	[[nodiscard]] const Double4x4 &inverseProjectionTransform() const noexcept { return _inverseProjectionTransform; }
+	[[nodiscard]] const Matrix4 &inverseProjectionTransform() const noexcept { return _inverseProjectionTransform; }
 	
 	/// @brief Normalized device coordinates→viewport pixels. Carries no mirroring or offset; those live in the projection.
-	[[nodiscard]] const Double4x4 &viewportTransform() const noexcept { return _viewportTransform; }
+	[[nodiscard]] const Matrix4 &viewportTransform() const noexcept { return _viewportTransform; }
 	
 	/// @brief Viewport pixels→normalized device coordinates.
-	[[nodiscard]] const Double4x4 &inverseViewportTransform() const noexcept { return _inverseViewportTransform; }
+	[[nodiscard]] const Matrix4 &inverseViewportTransform() const noexcept { return _inverseViewportTransform; }
 	
 	/// @brief World→normalized device coordinates: the projection composed with the view.
-	[[nodiscard]] Double4x4 viewProjectionTransform() const noexcept { return _projectionTransform * _viewTransform; }
+	[[nodiscard]] Matrix4 viewProjectionTransform() const noexcept { return _projectionTransform * _viewTransform; }
 	
 	/// @brief The normalized device depth the near plane projects to, under the settings' convention.
-	[[nodiscard]] double nearPlaneDepth() const noexcept { return Math::nearPlaneDepth(_settings.depthConvention); }
+	[[nodiscard]] TFloat nearPlaneDepth() const noexcept { return Math::nearPlaneDepth<TFloat>(_settings.depthConvention); }
 	
 	///----------------------------------------
 	///   @brief The normalized device depth the far plane projects to, under the settings' convention.
@@ -497,19 +531,19 @@ public:
 	///          two beats hard-coding it.
 	///----------------------------------------
 	
-	[[nodiscard]] double farPlaneDepth() const noexcept { return Math::farPlaneDepth(_settings.depthConvention); }
+	[[nodiscard]] TFloat farPlaneDepth() const noexcept { return Math::farPlaneDepth<TFloat>(_settings.depthConvention); }
 	
 	/// @brief The viewpoint in world coordinates — where the projection actually places the eye.
-	[[nodiscard]] const Double3 &eyePosition() const noexcept { return _eyePosition; }
+	[[nodiscard]] const Vector3 &eyePosition() const noexcept { return _eyePosition; }
 	
 	/// @brief The view's forward (+Z) axis, in world coordinates.
-	[[nodiscard]] const Double3 &forwardAxis() const noexcept { return _forwardAxis; }
+	[[nodiscard]] const Vector3 &forwardAxis() const noexcept { return _forwardAxis; }
 	
 	/// @brief The view's right (+X) axis, in world coordinates.
-	[[nodiscard]] const Double3 &rightAxis() const noexcept { return _rightAxis; }
+	[[nodiscard]] const Vector3 &rightAxis() const noexcept { return _rightAxis; }
 	
 	/// @brief The view's up (+Y) axis, in world coordinates.
-	[[nodiscard]] const Double3 &upAxis() const noexcept { return _upAxis; }
+	[[nodiscard]] const Vector3 &upAxis() const noexcept { return _upAxis; }
 	
 	///@}
 	///----------------------------------------
@@ -524,7 +558,7 @@ public:
 	///          @ref Math::Frustum::isValid before relying on this.
 	///----------------------------------------
 	
-	[[nodiscard]] const Frustum64 &frustum() const noexcept { return _frustum; }
+	[[nodiscard]] const Math::Frustum<TFloat> &frustum() const noexcept { return _frustum; }
 	
 	///----------------------------------------
 	///   @brief The world-space viewing volume with @c obstructionMargins removed.
@@ -533,7 +567,7 @@ public:
 	///          projection.
 	///----------------------------------------
 	
-	[[nodiscard]] const Frustum64 &unobstructedFrustum() const noexcept { return _unobstructedFrustum; }
+	[[nodiscard]] const Math::Frustum<TFloat> &unobstructedFrustum() const noexcept { return _unobstructedFrustum; }
 	
 	///----------------------------------------
 	/// @brief The view-space box an orthographic projection maps to clip space, or @c nullopt in the
@@ -543,9 +577,9 @@ public:
 	///----------------------------------------
 	
 	struct OrthographicVolume final {
-		rect_double bounds;  ///< The view-space extent, in world units.
-		double nearDepth{};  ///< View-space z of the near plane.
-		double farDepth{};   ///< View-space z of the far plane.
+		Rect bounds;  ///< The view-space extent, in world units.
+		TFloat nearDepth{};  ///< View-space z of the near plane.
+		TFloat farDepth{};   ///< View-space z of the far plane.
 	};
 	
 	[[nodiscard]] const std::optional<OrthographicVolume> &orthographicVolume() const noexcept { return _orthographicVolume; }
@@ -559,7 +593,7 @@ public:
 	///   @return The tangents, or an invalid @ref Math::FrustumTangents under @ref Projection::orthographic.
 	///----------------------------------------
 	
-	[[nodiscard]] const FrustumTangents<double> &frustumTangents() const noexcept { return _resolvedTangents; }
+	[[nodiscard]] const FrustumTangents<TFloat> &frustumTangents() const noexcept { return _resolvedTangents; }
 	
 	///@}
 	///----------------------------------------
@@ -573,14 +607,14 @@ public:
 	///           field of view to report.
 	///----------------------------------------
 	
-	[[nodiscard]] double fieldOfViewRadians(CameraAxis axis) const noexcept;
+	[[nodiscard]] TFloat fieldOfViewRadians(CameraAxis axis) const noexcept;
 	
 	///----------------------------------------
 	///   @brief How many pixels one radian spans along an axis.
 	///   @return The scale, or NaN under @ref Projection::orthographic.
 	///----------------------------------------
 	
-	[[nodiscard]] double pixelsPerRadian(CameraAxis axis) const noexcept;
+	[[nodiscard]] TFloat pixelsPerRadian(CameraAxis axis) const noexcept;
 	
 	///----------------------------------------
 	///   @brief The finest angular detail the view can resolve — half a pixel on the narrow axis, in radians.
@@ -589,10 +623,10 @@ public:
 	///   @return The angle, or NaN under @ref Projection::orthographic.
 	///----------------------------------------
 	
-	[[nodiscard]] double angularResolutionRadians() const noexcept;
+	[[nodiscard]] TFloat angularResolutionRadians() const noexcept;
 	
 	/// @brief The viewport's width divided by its height.
-	[[nodiscard]] double aspectRatio() const noexcept { return _aspectRatio; }
+	[[nodiscard]] TFloat aspectRatio() const noexcept { return _aspectRatio; }
 	
 	///@}
 	///----------------------------------------
@@ -608,21 +642,21 @@ public:
 	///   @param screenPoint The viewport point, in pixels, in the same coordinates as @c settings().viewport.
 	///----------------------------------------
 	
-	[[nodiscard]] Ray3d rayThroughScreenPoint(const Double2 &screenPoint) const noexcept;
+	[[nodiscard]] Math::Ray<TFloat> rayThroughScreenPoint(const Vector2 &screenPoint) const noexcept;
 	
 	///----------------------------------------
 	///   @brief The unit world-space direction through a viewport point.
 	/// @details Constant across the viewport under an orthographic projection, where every ray is parallel.
 	///----------------------------------------
 	
-	[[nodiscard]] Double3 worldDirectionThroughScreenPoint(const Double2 &screenPoint) const noexcept;
+	[[nodiscard]] Vector3 worldDirectionThroughScreenPoint(const Vector2 &screenPoint) const noexcept;
 	
 	///----------------------------------------
 	/// @brief The unit view-space direction through a viewport point — the same ray, before the view
 	///        transform, for a caller aligning against the device rather than the world.
 	///----------------------------------------
 	
-	[[nodiscard]] Double3 viewDirectionThroughScreenPoint(const Double2 &screenPoint) const noexcept;
+	[[nodiscard]] Vector3 viewDirectionThroughScreenPoint(const Vector2 &screenPoint) const noexcept;
 	
 	///----------------------------------------
 	///   @brief Where a world-space direction lands on the viewport.
@@ -632,7 +666,7 @@ public:
 	///           screen position.
 	///----------------------------------------
 	
-	[[nodiscard]] std::optional<Double2> screenPointForWorldDirection(const Double3 &direction) const noexcept;
+	[[nodiscard]] std::optional<Vector2> screenPointForWorldDirection(const Vector3 &direction) const noexcept;
 	
 	///----------------------------------------
 	///   @brief Where a world-space position lands on the viewport.
@@ -643,39 +677,39 @@ public:
 	///          @ref unobstructedFrustum is usually the better one.
 	///----------------------------------------
 	
-	[[nodiscard]] std::optional<Double2> screenPointForWorldPosition(const Double3 &position) const noexcept;
+	[[nodiscard]] std::optional<Vector2> screenPointForWorldPosition(const Vector3 &position) const noexcept;
 	
 	///@}
 	
 private:
-	[[nodiscard]] static Double3 divideByW(const Double4 &vector) noexcept;
-	[[nodiscard]] Double3 viewPointForScreenPoint(const Double2 &screenPoint, double normalizedDepth) const noexcept;
-	[[nodiscard]] std::optional<Double2> screenPointForViewPoint(const Double3 &viewPoint) const noexcept;
+	[[nodiscard]] static Vector3 divideByW(const Vector4 &vector) noexcept;
+	[[nodiscard]] Vector3 viewPointForScreenPoint(const Vector2 &screenPoint, TFloat normalizedDepth) const noexcept;
+	[[nodiscard]] std::optional<Vector2> screenPointForViewPoint(const Vector3 &viewPoint) const noexcept;
 	
-	CameraSettings _settings;
+	CameraSettings<TFloat> _settings;
 	bool _isValid = false;
 	
-	Double4x4 _unadjustedViewTransform = Double4x4::identity();
-	Double4x4 _viewTransform = Double4x4::identity();
-	Double4x4 _inverseViewTransform = Double4x4::identity();
-	Double4x4 _projectionTransform = Double4x4::identity();
-	Double4x4 _inverseProjectionTransform = Double4x4::identity();
-	Double4x4 _viewportTransform = Double4x4::identity();
-	Double4x4 _inverseViewportTransform = Double4x4::identity();
+	Matrix4 _unadjustedViewTransform = Matrix4::identity();
+	Matrix4 _viewTransform = Matrix4::identity();
+	Matrix4 _inverseViewTransform = Matrix4::identity();
+	Matrix4 _projectionTransform = Matrix4::identity();
+	Matrix4 _inverseProjectionTransform = Matrix4::identity();
+	Matrix4 _viewportTransform = Matrix4::identity();
+	Matrix4 _inverseViewportTransform = Matrix4::identity();
 	
-	Double3 _eyePosition{0, 0, 0};
-	Double3 _rightAxis{1, 0, 0};
-	Double3 _upAxis{0, 1, 0};
-	Double3 _forwardAxis{0, 0, 1};
+	Vector3 _eyePosition{0, 0, 0};
+	Vector3 _rightAxis{1, 0, 0};
+	Vector3 _upAxis{0, 1, 0};
+	Vector3 _forwardAxis{0, 0, 1};
 	
-	Frustum64 _frustum;
-	Frustum64 _unobstructedFrustum;
+	Math::Frustum<TFloat> _frustum;
+	Math::Frustum<TFloat> _unobstructedFrustum;
 	std::optional<OrthographicVolume> _orthographicVolume;
-	FrustumTangents<double> _resolvedTangents;
+	FrustumTangents<TFloat> _resolvedTangents;
 	
-	double _aspectRatio = 1;
-	double _horizontalFieldOfViewRadians = 0;
-	double _verticalFieldOfViewRadians = 0;
+	TFloat _aspectRatio = 1;
+	TFloat _horizontalFieldOfViewRadians = 0;
+	TFloat _verticalFieldOfViewRadians = 0;
 	bool _viewportIsWide = true;
 };
 
@@ -689,7 +723,8 @@ namespace detail {
 ///          so the fast path covers every ordinary case without making the odd one wrong.
 ///----------------------------------------
 
-[[nodiscard]] inline Double4x4 inverseViewTransformOf(const Double4x4 &transform) noexcept {
+template <class TFloat>
+[[nodiscard]] Matrix<TFloat, 4> inverseViewTransformOf(const Matrix<TFloat, 4> &transform) noexcept {
 	return isOrtho(transform) ? orthoInverse(transform) : inverse(transform);
 }
 
@@ -713,34 +748,36 @@ namespace detail {
 ///          @c z_clip = nearDepth, @c w_clip = z_view.
 ///----------------------------------------
 
-[[nodiscard]] inline Double4x4 depthConventionMatrix(DepthConvention convention) noexcept {
+template <class TFloat = double>
+[[nodiscard]] Matrix<TFloat, 4> depthConventionMatrix(DepthConvention convention) noexcept {
 	switch (convention) {
 		case DepthConvention::negativeOneToOne:
-			return Double4x4::identity();
+			return Matrix<TFloat, 4>::identity();
 			
 		// z' = (z + w) / 2
 		case DepthConvention::zeroToOne:
-			return Double4x4(Double4(1, 0, 0, 0), Double4(0, 1, 0, 0), Double4(0, 0, 0.5, 0), Double4(0, 0, 0.5, 1));
+			return Matrix<TFloat, 4>(Vector<TFloat, 4>(1, 0, 0, 0), Vector<TFloat, 4>(0, 1, 0, 0), Vector<TFloat, 4>(0, 0, 0.5, 0), Vector<TFloat, 4>(0, 0, 0.5, 1));
 			
 		// z' = (w - z) / 2
 		case DepthConvention::reversedZeroToOne:
-			return Double4x4(Double4(1, 0, 0, 0), Double4(0, 1, 0, 0), Double4(0, 0, -0.5, 0), Double4(0, 0, 0.5, 1));
+			return Matrix<TFloat, 4>(Vector<TFloat, 4>(1, 0, 0, 0), Vector<TFloat, 4>(0, 1, 0, 0), Vector<TFloat, 4>(0, 0, -0.5, 0), Vector<TFloat, 4>(0, 0, 0.5, 1));
 	}
-	return Double4x4::identity();
+	return Matrix<TFloat, 4>::identity();
 }
 
 ///----------------------------------------
 
-[[nodiscard]] inline Double4x4 cameraOrthographicMatrix(double left, double top, double right, double bottom,
-                                                        double nearDepth, double farDepth) noexcept {
-	const double rangeX = right - left;
-	const double rangeY = top - bottom;
-	const double rangeZ = farDepth - nearDepth;
-	return Double4x4(
-		Double4(2 / rangeX, 0, 0, 0),
-		Double4(0, 2 / rangeY, 0, 0),
-		Double4(0, 0, 2 / rangeZ, 0),
-		Double4(-(left + right) / rangeX, -(top + bottom) / rangeY, -(nearDepth + farDepth) / rangeZ, 1));
+template <class TFloat>
+[[nodiscard]] Matrix<TFloat, 4> cameraOrthographicMatrix(TFloat left, TFloat top, TFloat right, TFloat bottom,
+                                                        TFloat nearDepth, TFloat farDepth) noexcept {
+	const TFloat rangeX = right - left;
+	const TFloat rangeY = top - bottom;
+	const TFloat rangeZ = farDepth - nearDepth;
+	return Matrix<TFloat, 4>(
+		Vector<TFloat, 4>(2 / rangeX, 0, 0, 0),
+		Vector<TFloat, 4>(0, 2 / rangeY, 0, 0),
+		Vector<TFloat, 4>(0, 0, 2 / rangeZ, 0),
+		Vector<TFloat, 4>(-(left + right) / rangeX, -(top + bottom) / rangeY, -(nearDepth + farDepth) / rangeZ, 1));
 }
 	
 } // namespace detail
@@ -749,10 +786,11 @@ namespace detail {
 /// @brief Derives every transform, frustum and angular scale from @p settings.
 ///----------------------------------------
 
-inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settings(settings) {
+template <class TFloat>
+CameraView<TFloat>::CameraView(const CameraSettings<TFloat> &settings) noexcept : _settings(settings) {
 	// The view transform is well defined regardless of the framing, so build it before deciding whether
 	// anything is visible — a caller with a collapsed viewport still gets a usable orientation.
-	Double3 orientationRight, orientationUp, orientationForward;
+	Vector<TFloat, 3> orientationRight, orientationUp, orientationForward;
 	_settings.orientation.getLocalAxes(orientationRight, orientationUp, orientationForward);
 	_unadjustedViewTransform = localizationMatrix(orientationRight, orientationUp, orientationForward, _settings.position);
 	_viewTransform = _settings.riderTransform * _unadjustedViewTransform;
@@ -765,16 +803,16 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	
 	// Likewise the world-space axes are the columns of the composed view→world transform rather than the
 	// platform orientation's own.
-	const auto axisFromColumn = [](const Double4x4 &matrix, int index) {
-		const Double4 column = matrix.column(index);
-		return normalize(Double3(column.x, column.y, column.z));
+	const auto axisFromColumn = [](const Matrix<TFloat, 4> &matrix, int index) {
+		const Vector<TFloat, 4> column = matrix.column(index);
+		return normalize(Vector<TFloat, 3>(column.x, column.y, column.z));
 	};
 	_rightAxis = axisFromColumn(_inverseViewTransform, 0);
 	_upAxis = axisFromColumn(_inverseViewTransform, 1);
 	_forwardAxis = axisFromColumn(_inverseViewTransform, 2);
 	
-	const double viewportWidth = _settings.viewport.width();
-	const double viewportHeight = _settings.viewport.height();
+	const TFloat viewportWidth = _settings.viewport.width();
+	const TFloat viewportHeight = _settings.viewport.height();
 	const bool perspective = _settings.projection != Projection::orthographic;
 	const bool hasExplicitTangents = _settings.frustumTangents.has_value();
 	
@@ -806,8 +844,8 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	// and on the projection plane under an orthographic one — NDC-oriented, so top is above bottom. Both
 	// are linear in the same way, which is what lets the projection, frustum and margin arithmetic below be
 	// shared between every framing and projection mode.
-	double extentLeft = 0, extentRight = 0, extentTop = 0, extentBottom = 0;
-	double ndcOffsetX = 0, ndcOffsetY = 0;
+	TFloat extentLeft = 0, extentRight = 0, extentTop = 0, extentBottom = 0;
+	TFloat ndcOffsetX = 0, ndcOffsetY = 0;
 	
 	if (hasExplicitTangents) {
 		// An explicit frustum already says exactly what is visible, so there is nothing left for the clip
@@ -819,32 +857,32 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 		extentTop = tangents.top * _settings.nearDepth;
 		extentBottom = -tangents.bottom * _settings.nearDepth;
 	} else {
-		const double clipWidth = _settings.clipBounds.width();
-		const double clipHeight = _settings.clipBounds.height();
+		const TFloat clipWidth = _settings.clipBounds.width();
+		const TFloat clipHeight = _settings.clipBounds.height();
 		if (!(clipWidth > 0) || !(clipHeight > 0)) {
 			return;
 		}
 		
 		// The clip rectangle and the viewport offset are given in the viewport's orientation, where y grows
 		// downward; NDC has y growing upward. Flip both once, here.
-		const double clipLeft = _settings.clipBounds._left;
-		const double clipRight = _settings.clipBounds._right;
-		const double clipTop = -_settings.clipBounds._top;
-		const double clipBottom = -_settings.clipBounds._bottom;
+		const TFloat clipLeft = _settings.clipBounds._left;
+		const TFloat clipRight = _settings.clipBounds._right;
+		const TFloat clipTop = -_settings.clipBounds._top;
+		const TFloat clipBottom = -_settings.clipBounds._bottom;
 		ndcOffsetX = _settings.viewportOffset.x;
 		ndcOffsetY = -_settings.viewportOffset.y;
 		
 		// Resolve the narrow-axis field of view onto the screen axes. Tracking the narrow edge rather than a
 		// fixed one is what keeps the framing stable as the device rotates.
-		const double narrowToWideRatio = _viewportIsWide ? _aspectRatio : 1 / _aspectRatio;
-		const double narrowHalfAngleTangent = std::tan(_settings.narrowAxisFieldOfViewRadians / 2);
-		const double wideFieldOfViewRadians = 2 * std::atan(narrowHalfAngleTangent * narrowToWideRatio);
-		const double nominalVerticalFieldOfView = _viewportIsWide ? _settings.narrowAxisFieldOfViewRadians : wideFieldOfViewRadians;
-		const double verticalHalfAngleTangent = std::tan(nominalVerticalFieldOfView / 2);
+		const TFloat narrowToWideRatio = _viewportIsWide ? _aspectRatio : 1 / _aspectRatio;
+		const TFloat narrowHalfAngleTangent = std::tan(_settings.narrowAxisFieldOfViewRadians / 2);
+		const TFloat wideFieldOfViewRadians = 2 * std::atan(narrowHalfAngleTangent * narrowToWideRatio);
+		const TFloat nominalVerticalFieldOfView = _viewportIsWide ? _settings.narrowAxisFieldOfViewRadians : wideFieldOfViewRadians;
+		const TFloat verticalHalfAngleTangent = std::tan(nominalVerticalFieldOfView / 2);
 		
-		const double horizontalUnitScale = perspective ? verticalHalfAngleTangent * _settings.nearDepth * _aspectRatio
+		const TFloat horizontalUnitScale = perspective ? verticalHalfAngleTangent * _settings.nearDepth * _aspectRatio
 		                                               : _settings.orthographicHeight * _aspectRatio / 2;
-		const double verticalUnitScale = perspective ? verticalHalfAngleTangent * _settings.nearDepth
+		const TFloat verticalUnitScale = perspective ? verticalHalfAngleTangent * _settings.nearDepth
 		                                             : _settings.orthographicHeight / 2;
 		extentLeft = clipLeft * horizontalUnitScale;
 		extentRight = clipRight * horizontalUnitScale;
@@ -852,7 +890,7 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 		extentBottom = clipBottom * verticalUnitScale;
 	}
 	
-	Double4x4 projectionCore = Double4x4::identity();
+	Matrix<TFloat, 4> projectionCore = Matrix<TFloat, 4>::identity();
 	switch (_settings.projection) {
 		case Projection::perspective:
 			projectionCore = frustumMatrix(extentLeft, extentTop, extentRight, extentBottom, _settings.nearDepth, _settings.farDepth);
@@ -873,7 +911,7 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 			projectionCore = detail::cameraOrthographicMatrix(extentLeft, extentTop, extentRight, extentBottom,
 				_settings.nearDepth, _settings.farDepth);
 			_orthographicVolume = OrthographicVolume{
-				.bounds = rect_double(extentLeft, -extentTop, extentRight, -extentBottom),
+				.bounds = rect<TFloat>(extentLeft, -extentTop, extentRight, -extentBottom),
 				.nearDepth = _settings.nearDepth,
 				.farDepth = _settings.farDepth};
 			break;
@@ -884,11 +922,11 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	// the obvious-looking thing to do — shifts picked points twice as far as drawn ones.
 	// The depth convention touches only z and w, the mirror and offset only x and y, so the three commute
 	// and the order below is for reading rather than correctness.
-	const double mirrorX = _settings.mirrorHorizontally ? -1.0 : 1.0;
-	const double mirrorY = _settings.mirrorVertically ? -1.0 : 1.0;
-	_projectionTransform = detail::depthConventionMatrix(_settings.depthConvention)
-	                     * translationMatrix(Double3(ndcOffsetX, ndcOffsetY, 0))
-	                     * scaleMatrix(mirrorX, mirrorY, 1.0)
+	const TFloat mirrorX = _settings.mirrorHorizontally ? TFloat(-1) : TFloat(1);
+	const TFloat mirrorY = _settings.mirrorVertically ? TFloat(-1) : TFloat(1);
+	_projectionTransform = detail::depthConventionMatrix<TFloat>(_settings.depthConvention)
+	                     * translationMatrix(Vector<TFloat, 3>(ndcOffsetX, ndcOffsetY, 0))
+	                     * scaleMatrix(mirrorX, mirrorY, TFloat(1))
 	                     * projectionCore;
 	_inverseProjectionTransform = inverse(_projectionTransform);
 	
@@ -906,21 +944,21 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	
 	// The visible near-plane rectangle, after the offset moves the image within the viewport. Mirroring
 	// reverses which side of the axis the offset opens up, so fold it in rather than applying it twice.
-	const double effectiveOffsetX = mirrorX * ndcOffsetX;
-	const double effectiveOffsetY = mirrorY * ndcOffsetY;
-	const double centerX = (extentLeft + extentRight) / 2;
-	const double centerY = (extentTop + extentBottom) / 2;
-	const double halfSpanX = (extentRight - extentLeft) / 2;
-	const double halfSpanY = (extentTop - extentBottom) / 2;
-	double visibleLeft = centerX - (1 + effectiveOffsetX) * halfSpanX;
-	double visibleRight = centerX + (1 - effectiveOffsetX) * halfSpanX;
-	double visibleBottom = centerY - (1 + effectiveOffsetY) * halfSpanY;
-	double visibleTop = centerY + (1 - effectiveOffsetY) * halfSpanY;
+	const TFloat effectiveOffsetX = mirrorX * ndcOffsetX;
+	const TFloat effectiveOffsetY = mirrorY * ndcOffsetY;
+	const TFloat centerX = (extentLeft + extentRight) / 2;
+	const TFloat centerY = (extentTop + extentBottom) / 2;
+	const TFloat halfSpanX = (extentRight - extentLeft) / 2;
+	const TFloat halfSpanY = (extentTop - extentBottom) / 2;
+	TFloat visibleLeft = centerX - (1 + effectiveOffsetX) * halfSpanX;
+	TFloat visibleRight = centerX + (1 - effectiveOffsetX) * halfSpanX;
+	TFloat visibleBottom = centerY - (1 + effectiveOffsetY) * halfSpanY;
+	TFloat visibleTop = centerY + (1 - effectiveOffsetY) * halfSpanY;
 	
 	// Report the field of view the resolved frustum actually spans, not the one that was asked for. The two
 	// differ whenever a clip rectangle, a viewport offset or an explicit frustum is in play, and it is the
 	// resolved one that label sizing and level-of-detail thresholds want.
-	_resolvedTangents = FrustumTangents<double>{
+	_resolvedTangents = FrustumTangents<TFloat>{
 		.left = -visibleLeft / _settings.nearDepth,
 		.right = visibleRight / _settings.nearDepth,
 		.top = visibleTop / _settings.nearDepth,
@@ -929,16 +967,16 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 	_verticalFieldOfViewRadians = _resolvedTangents.verticalFieldOfViewRadians();
 	
 	// Frustum::perspective reads the view axes from the first three columns of an orientation matrix.
-	const Double4x4 frustumOrientation(
-		Double4(_rightAxis.x, _rightAxis.y, _rightAxis.z, 0),
-		Double4(_upAxis.x, _upAxis.y, _upAxis.z, 0),
-		Double4(_forwardAxis.x, _forwardAxis.y, _forwardAxis.z, 0),
-		Double4(0, 0, 0, 1));
+	const Matrix<TFloat, 4> frustumOrientation(
+		Vector<TFloat, 4>(_rightAxis.x, _rightAxis.y, _rightAxis.z, 0),
+		Vector<TFloat, 4>(_upAxis.x, _upAxis.y, _upAxis.z, 0),
+		Vector<TFloat, 4>(_forwardAxis.x, _forwardAxis.y, _forwardAxis.z, 0),
+		Vector<TFloat, 4>(0, 0, 0, 1));
 		
 	// Half-angles are signed, measured from the forward axis outward. An off-centre clip rectangle can put
 	// both edges of the image on the same side of the axis, and a negative half-angle expresses that.
-	const auto perspectiveFrustum = [&](double left, double top, double right, double bottom) {
-		return Frustum64::perspective(_eyePosition, frustumOrientation,
+	const auto perspectiveFrustum = [&](TFloat left, TFloat top, TFloat right, TFloat bottom) {
+		return Math::Frustum<TFloat>::perspective(_eyePosition, frustumOrientation,
 			std::atan2(-left, _settings.nearDepth), std::atan2(right, _settings.nearDepth),
 			std::atan2(top, _settings.nearDepth), std::atan2(-bottom, _settings.nearDepth));
 	};
@@ -953,8 +991,8 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 		return;
 	}
 	
-	const double nearPlaneUnitsPerPixelX = (visibleRight - visibleLeft) / viewportWidth;
-	const double nearPlaneUnitsPerPixelY = (visibleTop - visibleBottom) / viewportHeight;
+	const TFloat nearPlaneUnitsPerPixelX = (visibleRight - visibleLeft) / viewportWidth;
+	const TFloat nearPlaneUnitsPerPixelY = (visibleTop - visibleBottom) / viewportHeight;
 	visibleLeft += margins.left * nearPlaneUnitsPerPixelX;
 	visibleRight -= margins.right * nearPlaneUnitsPerPixelX;
 	visibleTop -= margins.top * nearPlaneUnitsPerPixelY;
@@ -969,9 +1007,10 @@ inline CameraView::CameraView(const CameraSettings &settings) noexcept : _settin
 
 ///----------------------------------------
 
-inline double CameraView::fieldOfViewRadians(CameraAxis axis) const noexcept {
+template <class TFloat>
+TFloat CameraView<TFloat>::fieldOfViewRadians(CameraAxis axis) const noexcept {
 	if (!_isValid || _settings.projection == Projection::orthographic) {
-		return std::numeric_limits<double>::quiet_NaN();
+		return std::numeric_limits<TFloat>::quiet_NaN();
 	}
 	switch (axis) {
 		case CameraAxis::narrow:     return _viewportIsWide ? _verticalFieldOfViewRadians : _horizontalFieldOfViewRadians;
@@ -979,56 +1018,61 @@ inline double CameraView::fieldOfViewRadians(CameraAxis axis) const noexcept {
 		case CameraAxis::horizontal: return _horizontalFieldOfViewRadians;
 		case CameraAxis::vertical:   return _verticalFieldOfViewRadians;
 	}
-	return std::numeric_limits<double>::quiet_NaN();
+	return std::numeric_limits<TFloat>::quiet_NaN();
 }
 
 ///----------------------------------------
 
-inline double CameraView::pixelsPerRadian(CameraAxis axis) const noexcept {
-	const double fieldOfView = fieldOfViewRadians(axis);
+template <class TFloat>
+TFloat CameraView<TFloat>::pixelsPerRadian(CameraAxis axis) const noexcept {
+	const TFloat fieldOfView = fieldOfViewRadians(axis);
 	if (!std::isfinite(fieldOfView) || fieldOfView <= 0) {
-		return std::numeric_limits<double>::quiet_NaN();
+		return std::numeric_limits<TFloat>::quiet_NaN();
 	}
-	const double viewportWidth = _settings.viewport.width();
-	const double viewportHeight = _settings.viewport.height();
+	const TFloat viewportWidth = _settings.viewport.width();
+	const TFloat viewportHeight = _settings.viewport.height();
 	switch (axis) {
 		case CameraAxis::narrow:     return std::min(viewportWidth, viewportHeight) / fieldOfView;
 		case CameraAxis::wide:       return std::max(viewportWidth, viewportHeight) / fieldOfView;
 		case CameraAxis::horizontal: return viewportWidth / fieldOfView;
 		case CameraAxis::vertical:   return viewportHeight / fieldOfView;
 	}
-	return std::numeric_limits<double>::quiet_NaN();
+	return std::numeric_limits<TFloat>::quiet_NaN();
 }
 
 ///----------------------------------------
 
-inline double CameraView::angularResolutionRadians() const noexcept {
-	const double scale = pixelsPerRadian(CameraAxis::narrow);
-	return std::isfinite(scale) ? 0.5 / scale : std::numeric_limits<double>::quiet_NaN();
+template <class TFloat>
+TFloat CameraView<TFloat>::angularResolutionRadians() const noexcept {
+	const TFloat scale = pixelsPerRadian(CameraAxis::narrow);
+	return std::isfinite(scale) ? TFloat(0.5) / scale : std::numeric_limits<TFloat>::quiet_NaN();
 }
 
 ///----------------------------------------
 
-inline Double3 CameraView::divideByW(const Double4 &vector) noexcept {
+template <class TFloat>
+Vector<TFloat, 3> CameraView<TFloat>::divideByW(const Vector<TFloat, 4> &vector) noexcept {
 	if (vector.w == 0 || !std::isfinite(vector.w)) {
-		return Double3(vector.x, vector.y, vector.z);
+		return Vector<TFloat, 3>(vector.x, vector.y, vector.z);
 	}
-	const double inverseW = 1 / vector.w;
-	return Double3(vector.x * inverseW, vector.y * inverseW, vector.z * inverseW);
+	const TFloat inverseW = TFloat(1) / vector.w;
+	return Vector<TFloat, 3>(vector.x * inverseW, vector.y * inverseW, vector.z * inverseW);
 }
 
 ///----------------------------------------
 /// @brief The view-space point a viewport point unprojects to at the given NDC depth (-1 near, +1 far).
 ///----------------------------------------
 
-inline Double3 CameraView::viewPointForScreenPoint(const Double2 &screenPoint, double normalizedDepth) const noexcept {
-	const Double3 normalizedPoint = transformPoint(_inverseViewportTransform, Double3(screenPoint.x, screenPoint.y, normalizedDepth));
-	return divideByW(_inverseProjectionTransform * Double4(normalizedPoint.x, normalizedPoint.y, normalizedPoint.z, 1));
+template <class TFloat>
+Vector<TFloat, 3> CameraView<TFloat>::viewPointForScreenPoint(const Vector<TFloat, 2> &screenPoint, TFloat normalizedDepth) const noexcept {
+	const Vector<TFloat, 3> normalizedPoint = transformPoint(_inverseViewportTransform, Vector<TFloat, 3>(screenPoint.x, screenPoint.y, normalizedDepth));
+	return divideByW(_inverseProjectionTransform * Vector<TFloat, 4>(normalizedPoint.x, normalizedPoint.y, normalizedPoint.z, 1));
 }
 
 ///----------------------------------------
 
-inline std::optional<Double2> CameraView::screenPointForViewPoint(const Double3 &viewPoint) const noexcept {
+template <class TFloat>
+std::optional<Vector<TFloat, 2>> CameraView<TFloat>::screenPointForViewPoint(const Vector<TFloat, 3> &viewPoint) const noexcept {
 	if (!_isValid) {
 		return std::nullopt;
 	}
@@ -1037,44 +1081,48 @@ inline std::optional<Double2> CameraView::screenPointForViewPoint(const Double3 
 	if (_settings.projection != Projection::orthographic && !(viewPoint.z > 0)) {
 		return std::nullopt;
 	}
-	const Double3 normalizedPoint = divideByW(_projectionTransform * Double4(viewPoint.x, viewPoint.y, viewPoint.z, 1));
-	const Double3 screenPoint = transformPoint(_viewportTransform, normalizedPoint);
-	return Double2(screenPoint.x, screenPoint.y);
+	const Vector<TFloat, 3> normalizedPoint = divideByW(_projectionTransform * Vector<TFloat, 4>(viewPoint.x, viewPoint.y, viewPoint.z, 1));
+	const Vector<TFloat, 3> screenPoint = transformPoint(_viewportTransform, normalizedPoint);
+	return Vector<TFloat, 2>(screenPoint.x, screenPoint.y);
 }
 
 ///----------------------------------------
 
-inline Ray3d CameraView::rayThroughScreenPoint(const Double2 &screenPoint) const noexcept {
+template <class TFloat>
+Ray<TFloat> CameraView<TFloat>::rayThroughScreenPoint(const Vector<TFloat, 2> &screenPoint) const noexcept {
 	if (!_isValid) {
-		return Ray3d(_eyePosition, _forwardAxis);
+		return Ray<TFloat>(_eyePosition, _forwardAxis);
 	}
-	const Double3 nearPoint = viewPointForScreenPoint(screenPoint, nearPlaneDepth());
+	const Vector<TFloat, 3> nearPoint = viewPointForScreenPoint(screenPoint, nearPlaneDepth());
 	if (_settings.projection == Projection::orthographic) {
 		// Parallel rays: the screen point chooses where the ray starts, not which way it points.
-		return Ray3d(transformPoint(_inverseViewTransform, nearPoint), _forwardAxis);
+		return Ray<TFloat>(transformPoint(_inverseViewTransform, nearPoint), _forwardAxis);
 	}
 	// The projection places the eye at the view-space origin, so the near-plane point is the direction.
-	return Ray3d(_eyePosition, normalize(transformDirection(_inverseViewTransform, nearPoint)));
+	return Ray<TFloat>(_eyePosition, normalize(transformDirection(_inverseViewTransform, nearPoint)));
 }
 
 ///----------------------------------------
 
-inline Double3 CameraView::worldDirectionThroughScreenPoint(const Double2 &screenPoint) const noexcept {
+template <class TFloat>
+Vector<TFloat, 3> CameraView<TFloat>::worldDirectionThroughScreenPoint(const Vector<TFloat, 2> &screenPoint) const noexcept {
 	return rayThroughScreenPoint(screenPoint).direction;
 }
 
 ///----------------------------------------
 
-inline Double3 CameraView::viewDirectionThroughScreenPoint(const Double2 &screenPoint) const noexcept {
+template <class TFloat>
+Vector<TFloat, 3> CameraView<TFloat>::viewDirectionThroughScreenPoint(const Vector<TFloat, 2> &screenPoint) const noexcept {
 	if (!_isValid || _settings.projection == Projection::orthographic) {
-		return Double3(0, 0, 1);
+		return Vector<TFloat, 3>(0, 0, 1);
 	}
 	return normalize(viewPointForScreenPoint(screenPoint, nearPlaneDepth()));
 }
 
 ///----------------------------------------
 
-inline std::optional<Double2> CameraView::screenPointForWorldDirection(const Double3 &direction) const noexcept {
+template <class TFloat>
+std::optional<Vector<TFloat, 2>> CameraView<TFloat>::screenPointForWorldDirection(const Vector<TFloat, 3> &direction) const noexcept {
 	// Under a parallel projection a direction carries no screen position — every point along it projects
 	// somewhere different, and there is no eye to anchor it to.
 	if (_settings.projection == Projection::orthographic) {
@@ -1085,7 +1133,8 @@ inline std::optional<Double2> CameraView::screenPointForWorldDirection(const Dou
 
 ///----------------------------------------
 
-inline std::optional<Double2> CameraView::screenPointForWorldPosition(const Double3 &position) const noexcept {
+template <class TFloat>
+std::optional<Vector<TFloat, 2>> CameraView<TFloat>::screenPointForWorldPosition(const Vector<TFloat, 3> &position) const noexcept {
 	return screenPointForViewPoint(transformPoint(_viewTransform, position));
 }
 
@@ -1099,13 +1148,18 @@ inline std::optional<Double2> CameraView::screenPointForWorldPosition(const Doub
 ///          later publish wins outright, so an interleaved read-modify-write can lose the other's change.
 ///----------------------------------------
 
+template <class TFloat>
 class Camera final {
 ///----------------------------------------
 public:
-	Camera() : Camera(CameraSettings{}) {}
+	using Scalar = TFloat;
+	using Settings = CameraSettings<TFloat>;
+	using View = CameraView<TFloat>;
 	
-	explicit Camera(const CameraSettings &settings)
-		: _settings(std::make_shared<const CameraSettings>(settings)) {}
+	Camera() : Camera(Settings{}) {}
+	
+	explicit Camera(const Settings &settings)
+		: _settings(std::make_shared<const Settings>(settings)) {}
 		
 	Camera(const Camera &other) {
 		const auto state = other.state();
@@ -1127,7 +1181,7 @@ public:
 	/// @brief The current settings.
 	///----------------------------------------
 	
-	[[nodiscard]] CameraSettings settings() const {
+	[[nodiscard]] Settings settings() const {
 		const std::lock_guard lock(_mutex);
 		return *_settings;
 	}
@@ -1138,12 +1192,12 @@ public:
 	///          callers use to detect change — survives a redundant write.
 	///----------------------------------------
 	
-	void setSettings(const CameraSettings &settings) {
+	void setSettings(const Settings &settings) {
 		const std::lock_guard lock(_mutex);
 		if (*_settings == settings) {
 			return;
 		}
-		_settings = std::make_shared<const CameraSettings>(settings);
+		_settings = std::make_shared<const Settings>(settings);
 		_view.reset();
 	}
 	
@@ -1151,15 +1205,15 @@ public:
 	///   @brief Applies @p edit to a copy of the settings and publishes the result.
 	/// @details The point of batching: however many fields the edit touches, it costs one publish and one
 	///          derivation, and no reader ever observes a half-applied change.
-	///   @param edit A callable taking @c CameraSettings& — for example
-	///          @code camera.edit([](Math::CameraSettings &settings) { settings.position = origin; settings.nearDepth = 0.1; }); @endcode
+	///   @param edit A callable taking @c Settings& — for example
+	///          @code camera.edit([](Math::Settings &settings) { settings.position = origin; settings.nearDepth = 0.1; }); @endcode
 	/// @note    @p edit runs without the camera's lock held, so it may call back into the camera. It sees a
 	///          snapshot taken when it started.
 	///----------------------------------------
 	
-	template <std::invocable<CameraSettings &> TEdit>
+	template <std::invocable<Settings &> TEdit>
 	void edit(TEdit &&editSettings) {
-		CameraSettings settings = this->settings();
+		Settings settings = this->settings();
 		std::forward<TEdit>(editSettings)(settings);
 		setSettings(settings);
 	}
@@ -1171,23 +1225,23 @@ public:
 	///          them return the same object, which makes pointer identity a change test.
 	///----------------------------------------
 	
-	[[nodiscard]] std::shared_ptr<const CameraView> view() const {
+	[[nodiscard]] std::shared_ptr<const View> view() const {
 		const std::lock_guard lock(_mutex);
 		if (!_view) {
-			_view = std::make_shared<const CameraView>(*_settings);
+			_view = std::make_shared<const View>(*_settings);
 		}
 		return _view;
 	}
 	
 private:
-	[[nodiscard]] std::pair<std::shared_ptr<const CameraSettings>, std::shared_ptr<const CameraView>> state() const {
+	[[nodiscard]] std::pair<std::shared_ptr<const Settings>, std::shared_ptr<const View>> state() const {
 		const std::lock_guard lock(_mutex);
 		return {_settings, _view};
 	}
 	
 	mutable std::mutex _mutex;
-	std::shared_ptr<const CameraSettings> _settings;
-	mutable std::shared_ptr<const CameraView> _view;
+	std::shared_ptr<const Settings> _settings;
+	mutable std::shared_ptr<const View> _view;
 };
 
 ///----------------------------------------
@@ -1197,7 +1251,12 @@ private:
 ///          cannot disagree about any of it.
 ///----------------------------------------
 
+template <class TFloat>
 struct EyeSettings final {
+	using Scalar = TFloat;
+	using Matrix4 = Matrix<TFloat, 4>;
+	using Rect = rect<TFloat>;
+	
 	///----------------------------------------
 	/// @brief This eye's displacement from the shared viewpoint, mapping device space into eye space.
 	/// @details Composed onto the shared @c riderTransform, so the head pose stays in one place and only
@@ -1205,15 +1264,15 @@ struct EyeSettings final {
 	///          rest of the camera's world — see @ref Math::StereoCameraView for why that is never in doubt.
 	///----------------------------------------
 	
-	Double4x4 eyeFromDevice = Double4x4::identity();
+	Matrix4 eyeFromDevice = Matrix4::identity();
 	
 	/// @brief This eye's frustum. Independent per eye, because a headset's two eyes look through different
 	///        parts of their optics and neither frustum is centred.
-	FrustumTangents<double> tangents;
+	FrustumTangents<TFloat> tangents;
 	
 	/// @brief This eye's pixels, when they differ from @c shared.viewport — a side-by-side layout puts the
 	///        two eyes in different regions of one texture. Left unset when both eyes fill the same bounds.
-	std::optional<rect_double> viewport;
+	std::optional<Rect> viewport;
 	
 	[[nodiscard]] bool operator==(const EyeSettings &) const = default;
 };
@@ -1223,6 +1282,7 @@ struct EyeSettings final {
 /// @brief A shared viewpoint plus the per-eye departures from it.
 ///----------------------------------------
 
+template <class TFloat>
 struct StereoCameraSettings final {
 	/// @brief How many eyes this type can carry. Raise it the day something needs more.
 	static constexpr size_t maxEyeCount = 2;
@@ -1236,10 +1296,10 @@ struct StereoCameraSettings final {
 	///    @note Its @c frustumTangents is ignored; framing comes from the eyes.
 	///----------------------------------------
 	
-	CameraSettings shared;
+	CameraSettings<TFloat> shared;
 	
 	/// @brief The eyes, of which the first @c eyeCount are used.
-	std::array<EyeSettings, maxEyeCount> eyes;
+	std::array<EyeSettings<TFloat>, maxEyeCount> eyes;
 	
 	/// @brief How many of @c eyes are live. Clamped to @c maxEyeCount; zero leaves nothing to render.
 	size_t eyeCount = maxEyeCount;
@@ -1278,17 +1338,25 @@ struct StereoCameraSettings final {
 ///          would have nothing left to guard.
 ///----------------------------------------
 
+template <class TFloat>
 class StereoCameraView final {
 ///----------------------------------------
 public:
+	using Scalar = TFloat;
+	using Vector3 = Vector<TFloat, 3>;
+	using Vector4 = Vector<TFloat, 4>;
+	using Matrix4 = Matrix<TFloat, 4>;
+	using View = CameraView<TFloat>;
+	using Settings = StereoCameraSettings<TFloat>;
+	
 	///----------------------------------------
 	/// @brief Derives every eye, the centre view and the combined bound from @p settings.
 	///----------------------------------------
 	
-	explicit StereoCameraView(const StereoCameraSettings &settings) noexcept;
+	explicit StereoCameraView(const Settings &settings) noexcept;
 	
 	/// @brief The settings this view was derived from.
-	[[nodiscard]] const StereoCameraSettings &settings() const noexcept { return _settings; }
+	[[nodiscard]] const Settings &settings() const noexcept { return _settings; }
 	
 	/// @brief Whether every live eye and the centre view are usable.
 	[[nodiscard]] bool isValid() const noexcept { return _isValid; }
@@ -1301,7 +1369,7 @@ public:
 	/// @param index Below @ref eyeCount; anything else returns the centre view rather than reading past the end.
 	///----------------------------------------
 	
-	[[nodiscard]] const CameraView &eyeAt(size_t index) const noexcept {
+	[[nodiscard]] const View &eyeAt(size_t index) const noexcept {
 		return index < _eyeCount ? _eyes[index] : _centerView;
 	}
 	
@@ -1314,7 +1382,7 @@ public:
 	///          eye separation does not matter.
 	///----------------------------------------
 	
-	[[nodiscard]] const CameraView &centerView() const noexcept { return _centerView; }
+	[[nodiscard]] const View &centerView() const noexcept { return _centerView; }
 	
 	///----------------------------------------
 	///   @brief A single frustum containing everything any eye can see, for culling once instead of per eye.
@@ -1332,21 +1400,22 @@ public:
 	///          eyes coincide and this bound's retreat is pure waste.
 	///----------------------------------------
 	
-	[[nodiscard]] const Frustum64 &combinedFrustum() const noexcept { return _combinedFrustum; }
+	[[nodiscard]] const Math::Frustum<TFloat> &combinedFrustum() const noexcept { return _combinedFrustum; }
 	
 private:
-	StereoCameraSettings _settings;
-	std::array<CameraView, StereoCameraSettings::maxEyeCount> _eyes;
-	CameraView _centerView;
-	Frustum64 _combinedFrustum;
+	Settings _settings;
+	std::array<View, Settings::maxEyeCount> _eyes;
+	View _centerView;
+	Math::Frustum<TFloat> _combinedFrustum;
 	size_t _eyeCount = 0;
 	bool _isValid = false;
 };
 
 ///----------------------------------------
 
-inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) noexcept : _settings(settings) {
-	_eyeCount = std::min(settings.eyeCount, StereoCameraSettings::maxEyeCount);
+template <class TFloat>
+StereoCameraView<TFloat>::StereoCameraView(const StereoCameraSettings<TFloat> &settings) noexcept : _settings(settings) {
+	_eyeCount = std::min(settings.eyeCount, StereoCameraSettings<TFloat>::maxEyeCount);
 	if (_eyeCount == 0) {
 		return;
 	}
@@ -1363,22 +1432,22 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 		unionTangents.bottom = std::max(unionTangents.bottom, tangents.bottom);
 	}
 	
-	CameraSettings centerSettings = settings.shared;
+	CameraSettings<TFloat> centerSettings = settings.shared;
 	centerSettings.frustumTangents = unionTangents;
-	_centerView = CameraView(centerSettings);
+	_centerView = CameraView<TFloat>(centerSettings);
 	
 	// Each eye is the shared viewpoint with its own displacement composed onto the head pose. Composing
 	// rather than replacing is what keeps the head pose in one place, shared by construction.
 	_isValid = _centerView.isValid();
 	for (size_t index = 0; index < _eyeCount; ++index) {
-		const EyeSettings &eye = settings.eyes[index];
-		CameraSettings eyeSettings = settings.shared;
+		const EyeSettings<TFloat> &eye = settings.eyes[index];
+		CameraSettings<TFloat> eyeSettings = settings.shared;
 		eyeSettings.riderTransform = eye.eyeFromDevice * settings.shared.riderTransform;
 		eyeSettings.frustumTangents = eye.tangents;
 		if (eye.viewport) {
 			eyeSettings.viewport = *eye.viewport;
 		}
-		_eyes[index] = CameraView(eyeSettings);
+		_eyes[index] = CameraView<TFloat>(eyeSettings);
 		_isValid = _isValid && _eyes[index].isValid();
 	}
 	
@@ -1393,22 +1462,22 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 	// apex is (T·depth + d)/(depth + p), which starts at d/p and rises to T, so it never exceeds T once
 	// p is that large. Better than widening at both ends: valid at every depth, and converging on the
 	// eyes' own angles far away instead of staying permanently splayed.
-	double maxEyeOffset = 0;
+	TFloat maxEyeOffset = 0;
 	for (size_t index = 0; index < _eyeCount; ++index) {
-		const Double3 eyeInDeviceSpace = translation(detail::inverseViewTransformOf(settings.eyes[index].eyeFromDevice));
+		const Vector<TFloat, 3> eyeInDeviceSpace = translation(detail::inverseViewTransformOf(settings.eyes[index].eyeFromDevice));
 		maxEyeOffset = std::max(maxEyeOffset, length(eyeInDeviceSpace));
 	}
 	
 	// The retreat is set by the tightest side, since that is the one the apex has to clear.
-	double smallestTangent = std::numeric_limits<double>::infinity();
-	for (const double tangent : {unionTangents.left, unionTangents.right, unionTangents.top, unionTangents.bottom}) {
+	TFloat smallestTangent = std::numeric_limits<TFloat>::infinity();
+	for (const TFloat tangent : {unionTangents.left, unionTangents.right, unionTangents.top, unionTangents.bottom}) {
 		if (tangent > 0) {
 			smallestTangent = std::min(smallestTangent, tangent);
 		}
 	}
 	
 	auto bound = unionTangents;
-	double apexRetreat = 0;
+	TFloat apexRetreat = 0;
 	if (maxEyeOffset > 0 && std::isfinite(smallestTangent)) {
 		apexRetreat = maxEyeOffset / smallestTangent;
 		// A side narrower than the retreat allows — which only an off-centre frustum with a negative tangent
@@ -1419,18 +1488,47 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 		bound.bottom = std::max(bound.bottom, smallestTangent);
 	}
 	
-	const Double3 &rightAxis = _centerView.rightAxis();
-	const Double3 &upAxis = _centerView.upAxis();
-	const Double3 &forwardAxis = _centerView.forwardAxis();
-	const Double4x4 orientation(
-		Double4(rightAxis.x, rightAxis.y, rightAxis.z, 0),
-		Double4(upAxis.x, upAxis.y, upAxis.z, 0),
-		Double4(forwardAxis.x, forwardAxis.y, forwardAxis.z, 0),
-		Double4(0, 0, 0, 1));
+	const Vector<TFloat, 3> &rightAxis = _centerView.rightAxis();
+	const Vector<TFloat, 3> &upAxis = _centerView.upAxis();
+	const Vector<TFloat, 3> &forwardAxis = _centerView.forwardAxis();
+	const Matrix<TFloat, 4> orientation(
+		Vector<TFloat, 4>(rightAxis.x, rightAxis.y, rightAxis.z, 0),
+		Vector<TFloat, 4>(upAxis.x, upAxis.y, upAxis.z, 0),
+		Vector<TFloat, 4>(forwardAxis.x, forwardAxis.y, forwardAxis.z, 0),
+		Vector<TFloat, 4>(0, 0, 0, 1));
 		
-	_combinedFrustum = Frustum64::perspective(_centerView.eyePosition() - forwardAxis * apexRetreat, orientation,
+	_combinedFrustum = Math::Frustum<TFloat>::perspective(_centerView.eyePosition() - forwardAxis * apexRetreat, orientation,
 		std::atan(bound.left), std::atan(bound.right), std::atan(bound.top), std::atan(bound.bottom));
 }
+
+///----------------------------------------
+/// @name Concrete instantiations
+/// @brief @c 64 is double precision, @c 32 single — matching @ref Math::Frustum64 and @ref Math::Frustum32.
+///        Double is the right default for a camera: a world measured in astronomical units still has to
+///        resolve arcseconds, and single precision runs out of mantissa long before that.
+///----------------------------------------
+///@{
+
+using FrustumTangents64 = FrustumTangents<double>;
+using FrustumTangents32 = FrustumTangents<float>;
+using EdgeInsets64 = EdgeInsets<double>;
+using EdgeInsets32 = EdgeInsets<float>;
+using CameraSettings64 = CameraSettings<double>;
+using CameraSettings32 = CameraSettings<float>;
+using ParallaxFraming64 = ParallaxFraming<double>;
+using ParallaxFraming32 = ParallaxFraming<float>;
+using CameraView64 = CameraView<double>;
+using CameraView32 = CameraView<float>;
+using Camera64 = Camera<double>;
+using Camera32 = Camera<float>;
+using EyeSettings64 = EyeSettings<double>;
+using EyeSettings32 = EyeSettings<float>;
+using StereoCameraSettings64 = StereoCameraSettings<double>;
+using StereoCameraSettings32 = StereoCameraSettings<float>;
+using StereoCameraView64 = StereoCameraView<double>;
+using StereoCameraView32 = StereoCameraView<float>;
+
+///@}
 
 ///----------------------------------------
 /// @brief Verifies the camera's conventions, invertibility, culling volumes and projection edge cases.
@@ -1439,6 +1537,14 @@ inline StereoCameraView::StereoCameraView(const StereoCameraSettings &settings) 
 
 inline void cameraSelfTest() {
 	using selftest::check;
+	
+	// The assertions below are written against double precision, which is where the tolerances were
+	// chosen; cameraSelfTestFloat covers the single-precision instantiation separately.
+	using CameraSettings = Math::CameraSettings64;
+	using CameraView = Math::CameraView64;
+	using Camera = Math::Camera64;
+	using StereoCameraSettings = Math::StereoCameraSettings64;
+	using StereoCameraView = Math::StereoCameraView64;
 	const auto near = [](double lhs, double rhs, double tolerance = 1.0e-9) noexcept { return std::abs(lhs - rhs) < tolerance; };
 	
 	// The clip-space depth of a view-space point, with the perspective divide the transforms deliberately
@@ -2133,6 +2239,70 @@ inline void cameraSelfTest() {
 		check(near(second->settings().position.x, 1) && near(second->settings().narrowAxisFieldOfViewRadians, 30 * deg2rad), "the edit applied every field");
 		check(near(first->settings().position.x, 0), "the earlier snapshot is unchanged by the edit");
 		check(near(first->fieldOfViewRadians(CameraAxis::narrow), 60 * deg2rad), "the earlier snapshot keeps its own derived state");
+	}
+	
+	// Single precision. The template exists so a caller can pay for the precision it actually needs, so
+	// the float instantiation has to be exercised rather than merely compiled. The assertions are the
+	// double-precision ones with tolerances widened to a 24-bit mantissa.
+	{
+		using Settings = CameraSettings32;
+		using View = CameraView32;
+		using Point = Vector<float, 2>;
+		using Position = Vector<float, 3>;
+		const auto nearFloat = [](float lhs, float rhs, float tolerance = 1.0e-4f) noexcept { return std::abs(lhs - rhs) < tolerance; };
+		
+		Settings settings;
+		settings.viewport.set(0, 0, 1200, 800);
+		settings.narrowAxisFieldOfViewRadians = float(60 * deg2rad);
+		settings.nearDepth = 1;
+		settings.farDepth = 1000;
+		const View view(settings);
+		check(view.isValid(), "a single-precision camera is valid");
+		check(nearFloat(view.aspectRatio(), 1.5f), "single precision resolves the aspect ratio");
+		check(nearFloat(view.fieldOfViewRadians(CameraAxis::narrow), float(60 * deg2rad)), "single precision resolves the narrow field of view");
+		
+		// The ray through the middle of the viewport is the forward axis.
+		const auto centerRay = view.rayThroughScreenPoint(Point(600, 400));
+		check(nearFloat(centerRay.direction.z, 1.0f), "the single-precision center ray points forward");
+		
+		// Unprojection and projection remain inverses, which is the property that costs the most mantissa.
+		const Point screenPoint(900, 250);
+		const auto ray = view.rayThroughScreenPoint(screenPoint);
+		const auto recovered = view.screenPointForWorldPosition(ray.origin + ray.direction * 50.0f);
+		check(recovered.has_value(), "a single-precision position projects back onto the viewport");
+		check(nearFloat(recovered->x, screenPoint.x, 0.25f) && nearFloat(recovered->y, screenPoint.y, 0.25f),
+			"single precision round-trips a screen point to within a quarter pixel");
+			
+		// The frustum still agrees with the projection about what is visible.
+		check(view.frustum().containsPoint(Position(0, 0, 10)), "the single-precision frustum contains the forward axis");
+		check(!view.frustum().containsPoint(Position(100, 0, 1)), "the single-precision frustum excludes what is off to the side");
+		
+		// The depth conventions land where they say they do.
+		Settings reversed = settings;
+		reversed.projection = Projection::infinitePerspective;
+		reversed.depthConvention = DepthConvention::reversedZeroToOne;
+		const View reversedView(reversed);
+		check(reversedView.isValid(), "a single-precision reversed-Z camera is valid");
+		check(nearFloat(reversedView.nearPlaneDepth(), 1.0f) && nearFloat(reversedView.farPlaneDepth(), 0.0f),
+			"single precision keeps the reversed depth convention");
+			
+		// The parallax helper composes in single precision, and its anchor plane still holds still.
+		const auto tangents = FrustumTangents<float>::symmetric(float(60 * deg2rad), float(40 * deg2rad));
+		const auto framing = parallaxFraming(tangents, 10.0f, Point(0.1f, 0.0f));
+		Settings nudged = settings;
+		framing.applyTo(nudged);
+		const View nudgedView(nudged);
+		check(nudgedView.isValid(), "a single-precision parallax framing is valid");
+		
+		// The invariant that makes the helper worth having: content at the anchor depth does not move.
+		Settings anchored = settings;
+		anchored.frustumTangents = tangents;
+		const View anchoredView(anchored);
+		const auto before = anchoredView.screenPointForWorldPosition(Position(0, 0, 10));
+		const auto after = nudgedView.screenPointForWorldPosition(Position(0, 0, 10));
+		check(before.has_value() && after.has_value(), "the anchor-depth point projects in both framings");
+		check(nearFloat(before->x, after->x, 0.5f) && nearFloat(before->y, after->y, 0.5f),
+			"single precision holds the anchor plane still under a nudge");
 	}
 }
 
