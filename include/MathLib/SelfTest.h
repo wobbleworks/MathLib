@@ -39,6 +39,7 @@
 #include "MathLib/Scalar.h"
 #include "MathLib/SegmentedCatmullRom.h"
 #include "MathLib/Spectrum.h"
+#include "MathLib/SphereGrid.h"
 #include "MathLib/Transforms.h"
 #include "MathLib/Tridiagonal.h"
 #include "MathLib/Vector.h"
@@ -121,6 +122,12 @@ inline Core::selftest::FunctionTestRegistrar _planeSelfTest("Plane", planeSelfTe
 ///----------------------------------------
 
 inline Core::selftest::FunctionTestRegistrar _frustumSelfTest("Frustum", frustumSelfTest);
+
+///----------------------------------------
+/// @brief Registers @ref sphereGridSelfTest; runs once in a debug build.
+///----------------------------------------
+
+inline Core::selftest::FunctionTestRegistrar _sphereGridSelfTest("SphereGrid", sphereGridSelfTest);
 
 ///----------------------------------------
 /// @brief Registers @ref fieldOfViewSelfTest; runs once in a debug build.
