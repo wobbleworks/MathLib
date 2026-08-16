@@ -1,0 +1,62 @@
+#----------------------------------------
+# MathLibConfig.cmake
+#
+# The package find_package(MathLib CONFIG) resolves. Consumers link the imported target
+# MathLib::MathLib, which is the same name an in-repository add_subdirectory() build provides,
+# so a consumer never has to know which route it got the library through.
+#
+# There is no find_dependency() call here, and that is deliberate rather than an omission.
+# MathLib's implementation is header-only and self-contained: the vector-math types pick their
+# backend at compile time from what the compiler offers (Apple simd, Clang vector extensions,
+# SSE2, or portable structs), and Accelerate — the one external library any of it touches — is
+# carried on the exported target as a plain -framework flag on the platforms that have it.
+#
+# The single exception is MathLib/SelfTest.h, the opt-in aggregator that registers the inline
+# module self-tests with CoreLib's runner. Nothing in MathLib includes it, so it is not a
+# dependency of the library — it is the optional SelfTest component below, which a consumer asks
+# for by name and which nobody else pays for:
+#
+#   find_package(MathLib COMPONENTS SelfTest)
+#   target_link_libraries(my_tests PRIVATE MathLib::SelfTest)
+#----------------------------------------
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/MathLibTargets.cmake")
+
+#----------------------------------------
+# SelfTest component
+#
+# CoreLib is searched only when the component is actually requested, so an ordinary
+# find_package(MathLib) never needs CoreLib present. QUIET plus an explicit _FOUND flag rather
+# than find_dependency() on purpose: find_dependency aborts the whole package when the search
+# fails, which is the wrong outcome for a component the caller may have listed as optional.
+# Reporting the component as not-found instead lets check_required_components below decide —
+# it fails the package for COMPONENTS, and passes it for OPTIONAL_COMPONENTS.
+#----------------------------------------
+
+if("SelfTest" IN_LIST MathLib_FIND_COMPONENTS)
+	find_package(CoreLib CONFIG QUIET)
+
+	if(TARGET CoreLib::CoreLib)
+		if(NOT TARGET MathLib::SelfTest)
+			add_library(MathLib::SelfTest INTERFACE IMPORTED)
+			set_target_properties(MathLib::SelfTest PROPERTIES
+				INTERFACE_LINK_LIBRARIES "MathLib::MathLib;CoreLib::CoreLib")
+		endif()
+		set(MathLib_SelfTest_FOUND TRUE)
+	else()
+		set(MathLib_SelfTest_FOUND FALSE)
+
+		# The diagnostic has to be set at package level: check_required_components only propagates
+		# MathLib_NOT_FOUND_MESSAGE, so a per-component message is silently dropped and the caller
+		# is told nothing beyond "set MathLib_FOUND to FALSE". Only set when the component was
+		# required, so an OPTIONAL_COMPONENTS caller — for whom this is not an error — sees nothing.
+		if(MathLib_FIND_REQUIRED_SelfTest)
+			set(MathLib_NOT_FOUND_MESSAGE
+				"MathLib's SelfTest component requires the CoreLib package (MathLib/SelfTest.h includes CoreLib/SelfTestRegistry.h). Add CoreLib's install prefix to CMAKE_PREFIX_PATH, or drop the SelfTest component.")
+		endif()
+	endif()
+endif()
+
+check_required_components(MathLib)
