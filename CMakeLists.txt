@@ -27,6 +27,20 @@ endif()
 # directories below reference through their install-tree generator expression.
 include(GNUInstallDirs)
 
+#----------------------------------------
+# Primary build
+#
+# True when this library owns its install rules and test targets: either it is the top-level
+# project, or the repo-root superbuild has declared it a deliberate member of a multi-library
+# build rather than somebody's private subdirectory. A sibling that pulls this library in with
+# add_subdirectory gets neither, which is what keeps its headers out of the wrong install prefix.
+#----------------------------------------
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR WW_SUPERBUILD)
+	set(MATHLIB_PRIMARY_BUILD ON)
+else()
+	set(MATHLIB_PRIMARY_BUILD OFF)
+endif()
+
 add_library(MathLib)
 
 #----------------------------------------
@@ -194,7 +208,7 @@ install(FILES
 # Blast.h uses Accelerate on Apple and its scalar fallback elsewhere. DEBUG is defined so
 # the registry (CoreLib/SelfTestRegistry.h) is active.
 #----------------------------------------
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(MATHLIB_PRIMARY_BUILD)
 	set(MATHLIB_IS_TOP_LEVEL ON)
 else()
 	set(MATHLIB_IS_TOP_LEVEL OFF)
