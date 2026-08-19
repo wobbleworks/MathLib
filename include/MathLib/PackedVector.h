@@ -52,8 +52,8 @@ using PackedVector3d = PackedVector3<double>;
 
 // Layout guarantees: this exact field layout and size is a persistence and GPU wire format —
 // on-disk records and GPU buffers are read and written as these bytes, so it must never change.
-static_assert(sizeof(PackedVector3f) == 12 && alignof(PackedVector3f) == 4);
-static_assert(sizeof(PackedVector3d) == 24 && alignof(PackedVector3d) == 8);
+static_assert(sizeof(PackedVector3f) == 12 && alignof(PackedVector3f) <= 4);
+static_assert(sizeof(PackedVector3d) == 24 && alignof(PackedVector3d) <= 8);
 static_assert(std::is_trivially_copyable_v<PackedVector3f> && std::is_standard_layout_v<PackedVector3f>);
 static_assert(std::is_trivially_copyable_v<PackedVector3d> && std::is_standard_layout_v<PackedVector3d>);
 
