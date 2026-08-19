@@ -45,6 +45,25 @@ jobs:
           - { name: Linux (Clang), os: ubuntu-latest, cmake_args: "-DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20" }
           - { name: Windows (MSVC), os: windows-latest }
           - { name: Linux (GCC, generic backend), os: ubuntu-latest, cmake_args: "-DCMAKE_CXX_FLAGS=-DMATH_BACKEND=MATH_BACKEND_GENERIC" }
+          # Android arm64 is the only leg where the ext_vector SIMD backend lowers to NEON. The NDK
+          # compiles with Clang and does not define __APPLE__, so BackendSelect.h resolves to
+          # MATH_BACKEND_SIMD — the same backend as the Linux Clang leg, but on a completely
+          # different vector unit. Every other leg is x86 (SSE/AVX) or Apple simd, so without this
+          # entry the NEON lowering the header advertises is never compiled at all.
+          #
+          # Note this leg deliberately does NOT pass BUILD_TESTING=OFF. MathLib's library target is
+          # one empty anchor TU, so a library-only cross-build would compile nothing and prove
+          # nothing; it is the self-test runner that instantiates every module header. The runner is
+          # therefore built for arm64 and simply not executed — running it would need an emulator,
+          # and the available emulator images are x86_64, which would test a different target than
+          # the one built.
+          - name: Android (arm64)
+            os: ubuntu-latest
+            build_only: true
+            cmake_args: >-
+              -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake
+              -DANDROID_ABI=arm64-v8a
+              -DANDROID_PLATFORM=android-24
 
     steps:
       - name: Check out MathLib
@@ -75,4 +94,5 @@ jobs:
       # The runner registers every module self-test; a failing module returns a non-zero exit
       # code and fails the job.
       - name: Self-test (CTest)
+        if: ${{ !matrix.build_only }}
         run: ctest --test-dir build --build-config Debug --output-on-failure
