@@ -178,11 +178,33 @@ register them all with CoreLib's runner, then execute them with
 
 ## Building
 
-MathLib is a CMake library target:
+MathLib is a CMake library target, available by three routes. All of them
+provide the same namespaced target, `MathLib::MathLib`, so nothing downstream
+has to know which route was used.
+
+Fetched at configure time — pin a tag, never a branch:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(MathLib
+	GIT_REPOSITORY https://github.com/wobbleworks/MathLib.git
+	GIT_TAG        v1.0.0)
+FetchContent_MakeAvailable(MathLib)
+target_link_libraries(your_target PRIVATE MathLib::MathLib)
+```
+
+From a checkout or submodule you already manage:
 
 ```cmake
 add_subdirectory(MathLib)
-target_link_libraries(your_target PRIVATE MathLib)
+target_link_libraries(your_target PRIVATE MathLib::MathLib)
+```
+
+Or from an installed package, after `cmake --install`:
+
+```cmake
+find_package(MathLib 1.0 CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE MathLib::MathLib)
 ```
 
 The header-only implementation is anchored by one empty source
@@ -199,6 +221,20 @@ cmake -S MathLib -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
+
+## Releases and versioning
+
+Releases are git tags of the form `v1.0.0`; [CHANGELOG.md](CHANGELOG.md)
+records what each one contains. Source is the only distribution — which for a
+header-only library is nearly all there is to ship, since the archive it builds
+is an anchor around one empty translation unit and the backend is chosen by the
+consumer's own compiler and flags.
+
+Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): the
+major component changes when the public API breaks, the minor when it grows
+compatibly, the patch for compatible fixes. MathLib is versioned independently
+of anything that consumes it, so `find_package(MathLib 1.0)` accepting any 1.x
+is a compatibility promise rather than an accident of release timing.
 
 ## License
 

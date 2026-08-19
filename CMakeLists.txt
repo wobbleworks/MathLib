@@ -15,12 +15,21 @@
 
 cmake_minimum_required(VERSION 3.20)
 
+# The released version, following Semantic Versioning: the major component changes when the
+# public API breaks, the minor when it grows compatibly, the patch for compatible fixes.
+# CHANGELOG.md records what each release contains. It is set here, unconditionally and ahead of
+# project(), because the install rules below also run in a superbuild where MathLib's own
+# project() never executes — reading PROJECT_VERSION there would stamp the package version file
+# with the enclosing project's version instead of this library's. The release workflow parses
+# this line and rejects a tag that disagrees with it.
+set(MATHLIB_VERSION 1.0.0)
+
 # Declare a project only at top level; when added via add_subdirectory() the
-# parent project() and toolchain govern. The version is what find_package(MathLib 1.2)
+# parent project() and toolchain govern. The version is what find_package(MathLib 1.0)
 # negotiates against; it is carried here rather than in a tag so a source checkout and an
 # installed package agree without consulting git.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-	project(MathLib VERSION 1.0.0 LANGUAGES CXX)
+	project(MathLib VERSION ${MATHLIB_VERSION} LANGUAGES CXX)
 endif()
 
 # GNUInstallDirs defines CMAKE_INSTALL_INCLUDEDIR / _LIBDIR, which the public include
@@ -189,7 +198,7 @@ configure_package_config_file(
 # later 1.y but never a 2.0 that may have moved something out from under it.
 write_basic_package_version_file(
 	"${CMAKE_CURRENT_BINARY_DIR}/MathLibConfigVersion.cmake"
-	VERSION ${PROJECT_VERSION}
+	VERSION ${MATHLIB_VERSION}
 	COMPATIBILITY SameMajorVersion)
 
 install(FILES

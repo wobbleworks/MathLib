@@ -21,9 +21,14 @@ name: Build & Self-Test
 # the GCC and MSVC legs cover it on the Intel and generic backends, whose constant-evaluation paths
 # are plain scalar code.
 on:
+  # Branch pushes only. A tag push is handled by release.yml, which calls this workflow as a
+  # reusable job (workflow_call below) so a release is gated on this same matrix rather than
+  # running it a second time alongside.
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build-and-test:

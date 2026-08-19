@@ -1,0 +1,115 @@
+name: Release
+
+# Publishes a GitHub Release when a vX.Y.Z tag is pushed.
+#
+# The tag is the release: the source tarballs GitHub generates, the GIT_TAG a FetchContent
+# consumer pins, and the version find_package() negotiates all hang off it. Three gates run
+# before anything is published, in order:
+#
+#   1. verify  — the tag must match MATHLIB_VERSION in CMakeLists.txt, and CHANGELOG.md must
+#                carry a section for it. This is what keeps the declared version and the tag
+#                from drifting, which matters because an installed package advertises the
+#                CMakeLists value and not the tag; a disagreement would ship a package
+#                claiming a version no consumer can resolve.
+#   2. build   — the full build.yml matrix, called as a reusable workflow so a release is
+#                gated on exactly the checks a branch push runs, with no second copy of the
+#                matrix to keep in sync.
+#   3. publish — creates the Release, using that CHANGELOG section as the body.
+#
+# No compiled artifact is attached, deliberately — see the packaging note in CHANGELOG.md.
+on:
+  push:
+    tags: ['v*']
+  # Allows re-running a release against a tag that already exists, without re-pushing it.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (for example v1.0.0)'
+        required: true
+
+# Creating a release writes to the repository; the default token is read-only for it.
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify version and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      # On a tag push `inputs` is empty, so the `||` falls through to the pushed ref.
+      - name: Check out the tagged commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve the tag and strip its leading v
+        id: resolve
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the tag agrees with MATHLIB_VERSION
+        run: |
+          declared=$(sed -n 's/^set(MATHLIB_VERSION \([0-9][0-9.]*\)).*/\1/p' CMakeLists.txt)
+          tagged='${{ steps.resolve.outputs.version }}'
+          if [ -z "$declared" ]; then
+            echo "::error::No 'set(MATHLIB_VERSION ...)' line found in CMakeLists.txt"
+            exit 1
+          fi
+          if [ "$declared" != "$tagged" ]; then
+            echo "::error::Tag ${{ steps.resolve.outputs.tag }} means version $tagged, but CMakeLists.txt declares $declared"
+            exit 1
+          fi
+          echo "CMakeLists.txt and the tag both say $declared."
+
+      - name: Check CHANGELOG.md documents this version
+        run: |
+          if ! grep -q "^## \[${{ steps.resolve.outputs.version }}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${{ steps.resolve.outputs.version }}]' section"
+            exit 1
+          fi
+
+  # The same matrix a branch push runs, invoked as a reusable workflow rather than duplicated.
+  build:
+    name: Build and self-test
+    needs: verify
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    name: Publish the GitHub Release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Take everything between this version's heading and the next '## ' heading. The verify
+      # job already established that the section exists, so an empty result here is a bug.
+      - name: Extract this version's changelog section
+        run: |
+          awk -v ver='${{ needs.verify.outputs.version }}' '
+            $0 ~ "^## \\[" ver "\\]" { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::Extracted an empty changelog section for ${{ needs.verify.outputs.version }}"
+            exit 1
+          fi
+          cat release-notes.md
+
+      # --verify-tag makes gh fail on a missing tag instead of quietly creating one from HEAD.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ needs.verify.outputs.tag }}' \
+            --title 'MathLib ${{ needs.verify.outputs.version }}' \
+            --notes-file release-notes.md \
+            --verify-tag
