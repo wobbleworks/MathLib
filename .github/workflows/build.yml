@@ -40,11 +40,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: macOS, os: macos-15 }
-          - { name: Linux (GCC), os: ubuntu-latest }
-          - { name: Linux (Clang), os: ubuntu-latest, cmake_args: "-DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20" }
-          - { name: Windows (MSVC), os: windows-latest }
-          - { name: Linux (GCC, generic backend), os: ubuntu-latest, cmake_args: "-DCMAKE_CXX_FLAGS=-DMATH_BACKEND=MATH_BACKEND_GENERIC" }
+          - name: macOS (ASan+UBSan)
+            os: macos-15
+            cmake_args: >-
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          - name: Linux GCC (ASan+UBSan)
+            os: ubuntu-latest
+            cmake_args: >-
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          - name: Linux Clang (ASan+UBSan)
+            os: ubuntu-latest
+            cmake_args: >-
+              -DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          # MSVC takes no -fsanitize flags, so the Windows leg builds and tests unsanitized — and
+          # deliberately passes no CMAKE_CXX_FLAGS at all, because setting that variable REPLACES
+          # MSVC's defaults rather than appending, silently dropping /EHsc and breaking the exception
+          # unwinding the self-test registry relies on.
+          - { name: Windows MSVC, os: windows-latest }
+          # The generic backend is forced through CMAKE_CXX_FLAGS, so the sanitizer flags have to ride
+          # in the same variable rather than a second -D that would overwrite it.
+          - name: Linux GCC, generic backend (ASan+UBSan)
+            os: ubuntu-latest
+            cmake_args: >-
+              -DCMAKE_CXX_FLAGS="-DMATH_BACKEND=MATH_BACKEND_GENERIC -fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
           # Android arm64 is the only leg where the ext_vector SIMD backend lowers to NEON. The NDK
           # compiles with Clang and does not define __APPLE__, so BackendSelect.h resolves to
           # MATH_BACKEND_SIMD — the same backend as the Linux Clang leg, but on a completely
@@ -77,10 +100,14 @@ jobs:
           repository: wobbleworks/CoreLib
           path: CoreLib
 
-      # The runner image ships Clang 16-18 only, so pull 20 from apt.llvm.org (see the header comment).
-      - name: Install Clang 20 (Linux Clang job)
-        if: matrix.name == 'Linux (Clang)'
-        run: wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
+      # The runner image ships Clang 16-18 only, so pull 20 from apt.llvm.org (see the header comment),
+      # plus libclang-rt, which carries its ASan/UBSan runtimes — without that package the sanitized
+      # link fails to find them.
+      - name: Install Clang 20 and its sanitizer runtimes (Linux Clang job)
+        if: matrix.name == 'Linux Clang (ASan+UBSan)'
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
+          sudo apt-get install -y libclang-rt-20-dev
 
       # CoreLib is found through MathLib's default CORELIB_INCLUDE_DIR (../CoreLib/include relative to
       # the MathLib source dir), which resolves to the sibling checkout above on every runner.
